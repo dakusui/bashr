@@ -14,7 +14,7 @@ showhelp() {
   echo   "bashreduce.  Map an input file to many hosts, sort/reduce, merge"
   echo   "  -j: job index, default = 0"
   echo   "  -m: hosts to use, can repeat hosts for multiple cores"
-  echo   "      default hosts from /etc/br.hosts"
+  echo   "      default hosts from ~/.br.hosts or /etc/br.hosts"
   echo   "  -c: column to partition, default = 1 (1-based)"
   echo   "  -i: input file, default = stdin"
   echo   "  -r: reduce function, default = identity"
@@ -49,11 +49,13 @@ while getopts "m:c:r:i:j:o:t:S:h" name; do
   esac
 done 
 
-if [ -z "$hosts" ]; then
-  if [ -e /etc/br.hosts ]; then
+if [ -z $hosts ]; then
+  if [ -e $HOME/.br.hosts ]; then
+    hosts=`cat $HOME/.br.hosts`
+  else if [ -e /etc/br.hosts ]; then
     hosts=`cat /etc/br.hosts`
   else
-    echo "`basename $0`: must specify hosts with -m or provide /etc/br.hosts"
+    echo "`basename $0`: must specify hosts with -m or provide ~/.br.hosts or /etc/br.hosts"
     usage $0
   fi
 fi

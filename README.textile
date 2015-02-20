@@ -8,7 +8,7 @@ bashreduce lets you apply your favorite unix tools in a mapreduce fashion across
 
 h2. Configuration
 
-Edit @/etc/br.hosts@ and enter the machines you wish to use as workers.  Or specify your machines at runtime:
+Edit @~/.br.hosts@ and/or @/etc/br.hosts@ and enter the machines you wish to use as workers.  Or specify your machines at runtime:
 
 <pre>br -m "host1 host2 host3"</pre>
 
