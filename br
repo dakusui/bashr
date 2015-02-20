@@ -26,6 +26,7 @@ showhelp() {
 } 
 
 hosts=
+base_port=8192
 mapcolumn=1
 reduce=
 input=
@@ -34,9 +35,10 @@ output=
 tmp_dir=/tmp
 sort_mem=256M
 
-while getopts "m:c:r:i:j:o:t:S:h" name; do
+while getopts "m:p:c:r:i:j:o:t:S:h" name; do
   case $name in
     m)  hosts=$OPTARG;;
+    p)  baseport=$OPTARG;;
     j)  job_idx=$OPTARG;;
     c)  mapcolumn=$OPTARG;;
     r)  reduce=$OPTARG;;
@@ -52,9 +54,9 @@ done
 if [ -z $hosts ]; then
   if [ -e $HOME/.br.hosts ]; then
     hosts=`cat $HOME/.br.hosts`
-  else if [ -e /etc/br.hosts ]; then
+  elif [ -e /etc/br.hosts ]; then
     hosts=`cat /etc/br.hosts`
-  else
+  else 
     echo "`basename $0`: must specify hosts with -m or provide ~/.br.hosts or /etc/br.hosts"
     usage $0
   fi
@@ -71,7 +73,7 @@ mkdir -p $jobpath/{in,out}
 
 # now, for each host, set up in and out fifos (and a netcat for each), and ssh to each host to set up workers listening on netcat
 num_hosts=$(($(echo "$hosts" | wc -w)))
-port_in=$((8192 + $num_hosts * $job_idx * 2))
+port_in=$(($base_port + $num_hosts * $job_idx * 2))
 port_out=$(($port_in + 1))
 host_idx=0
 out_files=
