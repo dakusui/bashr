@@ -81,10 +81,6 @@ if [ $mode != 'compat' ] && [ -z "$userfunc" ]; then
     echo "`basename $0`: $mode is specified. must specify userfunc with -r"
     usage $0
 fi
-if [ $mode == 'compat' ] && [ -n "$userfunc" ]; then
-    # if we have a userfunc, add the pipe explicitly
-    userfunc="| $userfunc 2> $errlog"
-fi
 
 # check if 'hosts' is set.
 hosts=${hosts:?"`basename $0`: must specify hosts with -m or provide BRHOSTS, ~/.br.hosts, or /etc/br.hosts"}
@@ -103,6 +99,21 @@ host_idx=0
 out_files=
 
 sorter="LC_ALL='$LC_ALL' sort -S$sort_mem $sort_opt -T$tmp_dir -k$mapcolumn,$mapcolumn 2>/dev/null"
+case $mode in 
+    map)
+	# In order to make 'map' userfunc syntax compatible with 'reduce''s, 
+	# translate '\"' to '"'
+        userfunc=$(echo "$userfunc" | sed -e 's!\\"!"!g')
+        ;;
+    reduce)
+        ;;
+    compat)
+	if [ -n "$userfunc" ]; then
+	    # if we have a userfunc, add the pipe explicitly
+	    userfunc="| $userfunc 2> $errlog"
+	fi
+esac
+echo ">>" $userfunc "<<"
 reducer='{
     prev="";
     line="\0";
@@ -116,7 +127,7 @@ reducer='{
         }
     }
     key = $ENVIRON["mapcolumn"];
-    cmd=ENVIRON["userfunc"] " | sed -e \"s/^.*$/" key FS "&/\"";
+    cmd=ENVIRON["userfunc"];
     gsub("{}", key, cmd);
     print line | cmd;
     if (prev != "" && prev != cmd) { close(prev); }
@@ -125,6 +136,7 @@ reducer='{
 END {
     close(prev);
 }'
+
 mapper="$userfunc"
 
 for host in $hosts; do
@@ -138,7 +150,7 @@ for host in $hosts; do
         map)
 	    ssh $host -n \
 		"tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
-                | $envvars $mapper | $sorter \
+                | $envvars sh -c '$mapper' | $sorter \
                 | nc -q0 -l -p $port_in >&/dev/null &"
             ;;
 	reduce)
