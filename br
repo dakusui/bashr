@@ -1,69 +1,93 @@
 #!/bin/bash
 # bashreduce: mapreduce in bash
-# erik@fawx.com
+#   erik@fawx.com
+#   dakusui@gmail.com
 
 usage() {
   local prog="`basename $1`"
-  echo "Usage: $prog [-m host1 [host2...]] [-c column] [-r reduce] [-i input] [-o output]"
+  echo "Usage: $prog [-m host1 [host2...]] [-c column] [-u userfunc] [-i input] [-o output]"
   echo "       $prog -h for help."
   exit 2
 }
 
 showhelp() {
-  echo "Usage: `basename $1`: [-m host1 [host2...]] [-c column] [-r reduce] [-i input] [-o output]"
+  echo "Usage: `basename $1`: [-m host1 [host2...]] [-c column] [-u userfunc] [-i input] [-o output]"
   echo   "bashreduce.  Map an input file to many hosts, sort/reduce, merge"
-  echo   "  -j: job index, default = 0"
   echo   "  -m: hosts to use, can repeat hosts for multiple cores"
   echo   "      default hosts from ~/.br.hosts or /etc/br.hosts"
+  echo   "  -p: base port, default = 8192"
+  echo   "  -M: mode ('map', 'reduce', 'compat'), default = 'compat'"
+  echo   "  -j: job index, default = 0"
   echo   "  -c: column to partition, default = 1 (1-based)"
   echo   "  -i: input file, default = stdin"
-  echo   "  -r: reduce function, default = identity"
+  echo   "  -r: userfunc function, default = identity"
   echo   "  -o: output file, default = stdout"
   echo   "  -t: tmp dir to use, default = /tmp"
+  echo   "  -l: error log file, default = /dev/null"
   echo   "  -S: memory to use for sort, default = 256M"
   echo   "  -h: this help message"
   exit 2
 } 
 
-hosts=
+brhostsfile="/etc/br.hosts"
+[ -e "$HOME/.br.hosts" ] && brhostsfile="$HOME/.br.hosts"
 base_port=8192
-mapcolumn=1
-reduce=
-input=
 job_idx=0
+mode='compat'
+hosts=$BRHOSTS
+mapcolumn=1
+userfunc=
+input=
 output=
 tmp_dir=/tmp
 sort_mem=256M
+sort_opt=
+errlog='/dev/null'
 
-while getopts "m:p:c:r:i:j:o:t:S:h" name; do
+while getopts "m:p:j:M:c:r:i:o:t:S:s:l:h" name; do
   case $name in
     m)  hosts=$OPTARG;;
     p)  baseport=$OPTARG;;
     j)  job_idx=$OPTARG;;
+    M)  mode=$OPTARG;;
     c)  mapcolumn=$OPTARG;;
-    r)  reduce=$OPTARG;;
+    r)  userfunc=$OPTARG;;
     i)  input=$OPTARG;;
     o)  output=$OPTARG;;
     t)  tmp_dir=$OPTARG;;
     S)  sort_mem=$OPTARG;;
+    s)  sort_opt=$OPTARG;;
+    l)  errlog=$OPTARG;;
     h)  showhelp $0;;
     [?])  usage $0;;
   esac
 done 
 
-if [ -z $hosts ]; then
-  if [ -e $HOME/.br.hosts ]; then
-    hosts=`cat $HOME/.br.hosts`
-  elif [ -e /etc/br.hosts ]; then
-    hosts=`cat /etc/br.hosts`
-  else 
-    echo "`basename $0`: must specify hosts with -m or provide ~/.br.hosts or /etc/br.hosts"
-    usage $0
-  fi
+if [ -n $hosts ]; then
+    if [ -e $brhostsfile ]; then
+	hosts=`cat $brhostsfile`
+    fi
 fi
 
-# if we have a reduce, add the pipe explicitly
-[ -n "$reduce" ] && reduce="| $reduce 2>>/tmp/brerr.log"
+case "$mode" in
+    compat|map|reduce)
+        ;;
+    *)
+        echo "`basename $0`: unknown mode is specified. ($mode)"
+        usage $0
+esac
+
+if [ $mode != 'compat' ] && [ -z "$userfunc" ]; then
+    echo "`basename $0`: $mode is specified. must specify userfunc with -r"
+    usage $0
+fi
+if [ $mode == 'compat' ] && [ -n "$userfunc" ]; then
+    # if we have a userfunc, add the pipe explicitly
+    userfunc="| $userfunc 2> $errlog"
+fi
+
+# check if 'hosts' is set.
+hosts=${hosts:?"`basename $0`: must specify hosts with -m or provide BRHOSTS, ~/.br.hosts, or /etc/br.hosts"}
 
 # okay let's get started!  first we need a name for our job
 jobid="`uuidgen`"
@@ -78,32 +102,77 @@ port_out=$(($port_in + 1))
 host_idx=0
 out_files=
 
+sorter="LC_ALL='$LC_ALL' sort -S$sort_mem $sort_opt -T$tmp_dir -k$mapcolumn,$mapcolumn 2>/dev/null"
+reducer='{
+    prev="";
+    line="\0";
+    for (i=1; i <=NF; i++) {
+        if (i!=ENVIRON["mapcolumn"]) {
+            if (line == "\0") {
+                line=$i;
+            } else {
+                line=sprintf("%s%s%s",line,FS,$i);
+            }
+        }
+    }
+    key = $ENVIRON["mapcolumn"];
+    cmd=ENVIRON["userfunc"] " | sed -e \"s/^.*$/" key FS "&/\"";
+    gsub("{}", key, cmd);
+    print line | cmd;
+    if (prev != "" && prev != cmd) { close(prev); }
+    prev=cmd;
+}
+END {
+    close(prev);
+}'
+mapper="$userfunc"
+
 for host in $hosts; do
-  # our named pipes
-  mkfifo $jobpath/{in,out}/$host_idx
-  # lets get the pid of our listener
-  ssh -n $host "mkdir -p $nodepath"
-  pid=$(ssh -n $host "nc -l -p $port_out >$nodepath/in_$host_idx 2>/dev/null </dev/null & jobs -l" | awk {'print $2'})
-  ssh $host -n "tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null | LC_ALL='$LC_ALL' sort -S$sort_mem -T$tmp_dir -k$mapcolumn,$mapcolumn 2>/dev/null $reduce | nc -q0 -l -p $port_in >&/dev/null &"
-  # our local forwarders
-  nc $host $port_in >$jobpath/in/$host_idx &
-  nc -q0 $host $port_out <$jobpath/out/$host_idx &
-  # our vars
-  out_files="$out_files $jobpath/out/$host_idx"
-  port_in=$(($port_in + 2))
-  port_out=$(($port_in + 1))
-  host_idx=$(($host_idx + 1))
+    # our named pipes
+    mkfifo $jobpath/{in,out}/$host_idx
+    # lets get the pid of our listener
+    ssh -n $host "mkdir -p $nodepath"
+    pid=$(ssh -n $host "nc -l -p $port_out >$nodepath/in_$host_idx 2>/dev/null </dev/null & jobs -l" | awk {'print $2'})
+    envvars="mapcolumn=$mapcolumn userfunc=\"$userfunc\""
+    case "$mode" in
+        map)
+	    ssh $host -n \
+		"tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
+                | $envvars $mapper | $sorter \
+                | nc -q0 -l -p $port_in >&/dev/null &"
+            ;;
+	reduce)
+	    ssh $host -n \
+		"tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
+                | $envvars awk '$reducer' | $sorter \
+                | nc -q0 -l -p $port_in >&/dev/null &"
+	    ;;
+        compat|*)
+	    ssh $host -n \
+		"tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
+                | $sorter $userfunc \
+                | nc -q0 -l -p $port_in >&/dev/null &"
+            ;;
+    esac
+    # our local forwarders
+    nc $host $port_in >$jobpath/in/$host_idx &
+    nc -q0 $host $port_out <$jobpath/out/$host_idx &
+    # our vars
+    out_files="$out_files $jobpath/out/$host_idx"
+    port_in=$(($port_in + 2))
+    port_out=$(($port_in + 1))
+    host_idx=$(($host_idx + 1))
 done
 
 # okay, time to map
 if which brp >/dev/null; then
-  eval "${input:+pv $input |} brp - $(($mapcolumn - 1)) $out_files"
+    eval "${input:+pv $input |} brp - $(($mapcolumn - 1)) $out_files"
 else
-  # use awk if we don't have brp
-  # we're taking advantage of a special property that awk leaves its file handles open until its done
-  # i think this is universal
-  # we're also sending a zero length string to all the handles at the end, in case some pipe got no love
-  eval "${input:+pv $input |} awk '{
+    # use awk if we don't have brp
+    # we're taking advantage of a special property that awk leaves its file handles open until its done
+    # i think this is universal
+    # we're also sending a zero length string to all the handles at the end, in case some pipe got no love
+    eval "${input:+pv $input |} awk '{
       srand(\$$mapcolumn);
       print \$0 >>\"$jobpath/out/\"int(rand() * $host_idx);
     }
@@ -114,19 +183,17 @@ else
 fi
 
 # save it somewhere
-if which brm >/dev/null; then
-  eval "brm - $(($mapcolumn - 1)) `find $jobpath/in/ -type p | xargs` ${output:+| pv >$output}"
-else
-  # use sort -m if we don't have brm
-  # sort -m creates tmp files if too many input files are specified
-  # brm doesn't do this
-  eval "sort -k$mapcolumn,$mapcolumn -m $jobpath/in/* ${output:+| pv >$output}"
-fi
+
+# use sort -m. 
+# (abolished brm to simplify the software since i couldn't convince myself there is a big performance gain)
+# sort -m creates tmp files if too many input files are specified
+# brm doesn't do this
+eval "sort $sort_opt -k$mapcolumn,$mapcolumn -m $jobpath/in/* ${output:+| pv >$output}"
 
 # finally, clean up after ourselves
 rm -rf $jobpath
 for host in $hosts; do
-  ssh $host "rm -rf $nodepath"
+    ssh $host "rm -rf $nodepath"
 done
 
 # TODO: is there a safe way to kill subprocesses upon fail?
