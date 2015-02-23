@@ -24,6 +24,10 @@ h3. word count
 
 <pre>br -r "uniq -c" < input > output</pre>
 
+```
+$ find /home/hiroshi/Documents/ -type f -name '*.java' | br -M map -j 0 -r 'tr -s "[[:punct:][:space:]]" "\n"' |  br -M reduce -j 1 -c 1 -I awk -r 'BEGIN {i=0;key="";} {key=$1;i++;} END {print key,i; }'
+```
+
 h3. great big join
 
 <pre>LC_ALL='C' br -r "join - /tmp/join_data" < input > output</pre>
