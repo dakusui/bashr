@@ -123,26 +123,24 @@ bashr_init() {
 		userfunc="| $interpreter '$userfunc' 2> $errlog"
 	    fi
     esac
-    reducer='{
-        prev="";
-        line="";
-        firsttime=1;
+    reducer='BEGIN {
+        prevkey="";
+        cmd=sprintf("%s %c%s%c", ENVIRON["interpreter"], 39, ENVIRON["userfunc"], 39);
+    }
+    {
+        key=$ENVIRON["mapcolumn"];
+        ENVIRON["BASHR_KEY"]=key;
+        if (prevkey !="" && prevkey != key) { 
+          close(cmd); 
+        }
+        line=key;
         for (i=1; i <=NF; i++) {
             if (i!=ENVIRON["mapcolumn"]) {
-                if (firsttime) {
-                    line=$i;
-                    firsttime=0;
-                } else {
-                    line=sprintf("%s%s%s",line,FS,$i);
-                }
+              line=sprintf("%s%s%s",line,FS,$i);
             }
         }
-        key=$ENVIRON["mapcolumn"];
-        cmd=sprintf("%s %c%s%c", ENVIRON["interpreter"], 39, ENVIRON["userfunc"], 39);
-        gsub("{}", key, cmd);
         print line | cmd;
-        if (prev != "" && prev != cmd) { close(prev); }
-        prev=cmd;
+        prevkey=key;
     }
     END {
         close(prev);
