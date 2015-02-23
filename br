@@ -1,5 +1,7 @@
-#!/bin/bash
-# bashreduce: mapreduce in bash
+#!/bin/bash -eu
+
+#   bashreduce: mapreduce in bash
+# 
 #   erik@fawx.com
 #   dakusui@gmail.com
 
@@ -17,6 +19,7 @@ showhelp() {
   echo   "      default hosts from ~/.br.hosts or /etc/br.hosts"
   echo   "  -p: base port, default = 8192"
   echo   "  -M: mode ('map', 'reduce', 'compat'), default = 'compat'"
+  echo   "  -I: interpreter. ignored if 'compat' mode is used, default = 'sh -c'"
   echo   "  -j: job index, default = 0"
   echo   "  -c: column to partition, default = 1 (1-based)"
   echo   "  -i: input file, default = stdin"
@@ -29,184 +32,239 @@ showhelp() {
   exit 2
 } 
 
-brhostsfile="/etc/br.hosts"
-[ -e "$HOME/.br.hosts" ] && brhostsfile="$HOME/.br.hosts"
-base_port=8192
-job_idx=0
-mode='compat'
-hosts=$BRHOSTS
-mapcolumn=1
-userfunc=
-input=
-output=
-tmp_dir=/tmp
-sort_mem=256M
-sort_opt=
-errlog='/dev/null'
 
-while getopts "m:p:j:M:c:r:i:o:t:S:s:l:h" name; do
-  case $name in
-    m)  hosts=$OPTARG;;
-    p)  baseport=$OPTARG;;
-    j)  job_idx=$OPTARG;;
-    M)  mode=$OPTARG;;
-    c)  mapcolumn=$OPTARG;;
-    r)  userfunc=$OPTARG;;
-    i)  input=$OPTARG;;
-    o)  output=$OPTARG;;
-    t)  tmp_dir=$OPTARG;;
-    S)  sort_mem=$OPTARG;;
-    s)  sort_opt=$OPTARG;;
-    l)  errlog=$OPTARG;;
-    h)  showhelp $0;;
-    [?])  usage $0;;
-  esac
-done 
+# out
+#   jobid    "${OPTARG:-$(uuid)}"
+#   jobpath  "${tmp_dir:-/tmp}/br_job_${jobid}}"
+#   nodepath "${tmp_dir:-/tmp}/br_node_${jobid}}"
+# local
+bashr_paramcheck() {
+    ${LC_ALL:=""}
+    ${BRHOSTS:=""}
+    
+    brhostsfile="/etc/br.hosts"
+    [ -e "$HOME/.br.hosts" ] && brhostsfile="$HOME/.br.hosts"
+    base_port=8192
+    job_idx=0
+    mode='compat'
+    interpreter='sh -c'
+    hosts=$BRHOSTS
+    mapcolumn=1
+    userfunc=
+    input=
+    output=
+    tmp_dir=/tmp
+    sort_mem=256M
+    sort_opt=
+    errlog='/dev/null'
 
-if [ -n $hosts ]; then
-    if [ -e $brhostsfile ]; then
-	hosts=`cat $brhostsfile`
-    fi
-fi
-
-case "$mode" in
-    compat|map|reduce)
-        ;;
-    *)
-        echo "`basename $0`: unknown mode is specified. ($mode)"
-        usage $0
-esac
-
-if [ $mode != 'compat' ] && [ -z "$userfunc" ]; then
-    echo "`basename $0`: $mode is specified. must specify userfunc with -r"
-    usage $0
-fi
-
-# check if 'hosts' is set.
-hosts=${hosts:?"`basename $0`: must specify hosts with -m or provide BRHOSTS, ~/.br.hosts, or /etc/br.hosts"}
-
-# okay let's get started!  first we need a name for our job
-jobid="`uuidgen`"
-jobpath="$tmp_dir/br_job_$jobid"
-nodepath="$tmp_dir/br_node_$jobid"
-mkdir -p $jobpath/{in,out}
-
-# now, for each host, set up in and out fifos (and a netcat for each), and ssh to each host to set up workers listening on netcat
-num_hosts=$(($(echo "$hosts" | wc -w)))
-port_in=$(($base_port + $num_hosts * $job_idx * 2))
-port_out=$(($port_in + 1))
-host_idx=0
-out_files=
-
-sorter="LC_ALL='$LC_ALL' sort -S$sort_mem $sort_opt -T$tmp_dir -k$mapcolumn,$mapcolumn 2>/dev/null"
-case $mode in 
-    map)
-	# In order to make 'map' userfunc syntax compatible with 'reduce''s, 
-	# translate '\"' to '"'
-        userfunc=$(echo "$userfunc" | sed -e 's!\\"!"!g')
-        ;;
-    reduce)
-        ;;
-    compat)
-	if [ -n "$userfunc" ]; then
-	    # if we have a userfunc, add the pipe explicitly
-	    userfunc="| $userfunc 2> $errlog"
+    while getopts "m:p:j:M:I:c:r:i:o:t:S:s:l:h" name; do
+	case $name in
+	    m)  hosts=$OPTARG;;
+	    p)  baseport=$OPTARG;;
+	    j)  job_idx=$OPTARG;;
+	    M)  mode=$OPTARG;;
+            I)  interpreter=$OPTARG;;
+	    c)  mapcolumn=$OPTARG;;
+	    r)  userfunc=$OPTARG;;
+	    i)  input=$OPTARG;;
+	    o)  output=$OPTARG;;
+	    t)  tmp_dir=$OPTARG;;
+	    S)  sort_mem=$OPTARG;;
+	    s)  sort_opt=$OPTARG;;
+	    l)  errlog=$OPTARG;;
+	    h)  showhelp $0;;
+	    [?])  usage $0;;
+	esac
+    done 
+    if [ -n $hosts ]; then
+	if [ -e $brhostsfile ]; then
+	    hosts=`cat $brhostsfile`
 	fi
-esac
-echo ">>" $userfunc "<<"
-reducer='{
-    prev="";
-    line="\0";
-    for (i=1; i <=NF; i++) {
-        if (i!=ENVIRON["mapcolumn"]) {
-            if (line == "\0") {
-                line=$i;
-            } else {
-                line=sprintf("%s%s%s",line,FS,$i);
-            }
-        }
-    }
-    key = $ENVIRON["mapcolumn"];
-    cmd=ENVIRON["userfunc"];
-    gsub("{}", key, cmd);
-    print line | cmd;
-    if (prev != "" && prev != cmd) { close(prev); }
-    prev=cmd;
-}
-END {
-    close(prev);
-}'
-
-mapper="$userfunc"
-
-for host in $hosts; do
-    # our named pipes
-    mkfifo $jobpath/{in,out}/$host_idx
-    # lets get the pid of our listener
-    ssh -n $host "mkdir -p $nodepath"
-    pid=$(ssh -n $host "nc -l -p $port_out >$nodepath/in_$host_idx 2>/dev/null </dev/null & jobs -l" | awk {'print $2'})
-    envvars="mapcolumn=$mapcolumn userfunc=\"$userfunc\""
+    fi
+    # check if 'hosts' is set.
+    hosts=${hosts:?"`basename $0`: must specify hosts with -m or provide BRHOSTS, ~/.br.hosts, or /etc/br.hosts"}
     case "$mode" in
-        map)
-	    ssh $host -n \
-		"tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
-                | $envvars sh -c '$mapper' | $sorter \
-                | nc -q0 -l -p $port_in >&/dev/null &"
+	compat|map|reduce)
+            ;;
+	*)
+            echo "`basename $0`: unknown mode is specified. ($mode)"
+            usage $0
+    esac
+    if [ $mode != 'compat' ] && [ -z "$userfunc" ]; then
+	echo "`basename $0`: $mode is specified. must specify userfunc with -r"
+	usage $0
+    fi
+    jobid=${jobid:-"`uuidgen`"}
+
+    # okay let's get started!  first we need a name for our job
+    jobpath="$tmp_dir/br_job_$jobid"
+    nodepath="$tmp_dir/br_node_$jobid"
+}
+
+# * in
+#   
+# * out
+#   sorter
+#   reducer
+#   mapper
+# * tmp (local)
+#   
+bashr_init() {
+    sorter="LC_ALL='$LC_ALL' sort -S$sort_mem $sort_opt -T$tmp_dir -k$mapcolumn,$mapcolumn 2>/dev/null"
+    case $mode in 
+	map)
             ;;
 	reduce)
-	    ssh $host -n \
-		"tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
+            ;;
+	compat)
+	    if [ -n "$userfunc" ]; then
+	    # if we have a userfunc, add the pipe explicitly
+		userfunc="| $interpreter '$userfunc' 2> $errlog"
+	    fi
+    esac
+    reducer='{
+        prev="";
+        line="";
+        firsttime=1;
+        for (i=1; i <=NF; i++) {
+            if (i!=ENVIRON["mapcolumn"]) {
+                if (firsttime) {
+                    line=$i;
+                    firsttime=0;
+                } else {
+                    line=sprintf("%s%s%s",line,FS,$i);
+                }
+            }
+        }
+        key=$ENVIRON["mapcolumn"];
+        cmd=sprintf("%s %c%s%c", ENVIRON["interpreter"], 39, ENVIRON["userfunc"], 39);
+        gsub("{}", key, cmd);
+        print line | cmd;
+        if (prev != "" && prev != cmd) { close(prev); }
+        prev=cmd;
+    }
+    END {
+        close(prev);
+    }'
+    mapper='{
+        cmd=sprintf("%s %c%s%c", ENVIRON["interpreter"], 39, ENVIRON["userfunc"], 39);
+        print | cmd; 
+    }'
+}
+
+# Executes a map/reduce/comat task
+# 
+# variables:
+# * read
+#   hosts
+#   mode
+#   mapcolumn
+#   userfunc
+#   sort_opt
+#   mapper
+#   reducer
+#   sorter
+#   jobpath
+#   nodepath 
+# * write
+#   (none)
+# * local
+#   host
+#   pid
+#   envvars
+#   port_in
+#   port_out
+#   host_idx
+#   out_files
+#   input
+bashr_executetask() {
+    # now, for each host, set up in and out fifos (and a netcat for each), and ssh to each host to set up workers listening on netcat
+    num_hosts=$(($(echo "$hosts" | wc -w)))
+    port_in=$(($base_port + $num_hosts * $job_idx * 2))
+    port_out=$(($port_in + 1))
+    mkdir -p $jobpath/{in,out}
+
+    host_idx=0
+    out_files=
+    
+    for host in $hosts; do
+        # our named pipes
+	mkfifo $jobpath/{in,out}/$host_idx
+        # lets get the pid of our listener
+	ssh -n $host "mkdir -p $nodepath"
+	pid=$(ssh -n $host "nc -l -p $port_out >$nodepath/in_$host_idx 2>/dev/null </dev/null & jobs -l" | awk {'print $2'})
+	envvars="mapcolumn=$mapcolumn userfunc='$userfunc' interpreter='$interpreter'"
+	case "$mode" in
+            map)
+		ssh $host -n \
+		    "tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
+                | $envvars awk '$mapper' | $sorter \
+                | nc -q0 -l -p $port_in >&/dev/null &"
+		;;
+	    reduce)
+		ssh $host -n \
+		    "tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
                 | $envvars awk '$reducer' | $sorter \
                 | nc -q0 -l -p $port_in >&/dev/null &"
-	    ;;
-        compat|*)
-	    ssh $host -n \
-		"tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
+		;;
+            compat|*)
+		ssh $host -n \
+		    "tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
                 | $sorter $userfunc \
                 | nc -q0 -l -p $port_in >&/dev/null &"
-            ;;
-    esac
-    # our local forwarders
-    nc $host $port_in >$jobpath/in/$host_idx &
-    nc -q0 $host $port_out <$jobpath/out/$host_idx &
-    # our vars
-    out_files="$out_files $jobpath/out/$host_idx"
-    port_in=$(($port_in + 2))
-    port_out=$(($port_in + 1))
-    host_idx=$(($host_idx + 1))
-done
-
-# okay, time to map
-if which brp >/dev/null; then
-    eval "${input:+pv $input |} brp - $(($mapcolumn - 1)) $out_files"
-else
+		;;
+	esac
+        # our local forwarders
+	nc $host $port_in >$jobpath/in/$host_idx &
+	nc -q0 $host $port_out <$jobpath/out/$host_idx &
+        # our vars
+	out_files="$out_files $jobpath/out/$host_idx"
+	port_in=$(($port_in + 2))
+	port_out=$(($port_in + 1))
+	host_idx=$(($host_idx + 1))
+    done
+    
+    ####    
+    # okay, time to map
+    if which brp >/dev/null; then
+	eval "${input:+pv $input |} brp - $(($mapcolumn - 1)) $out_files"
+    else
+    ####    
     # use awk if we don't have brp
     # we're taking advantage of a special property that awk leaves its file handles open until its done
     # i think this is universal
     # we're also sending a zero length string to all the handles at the end, in case some pipe got no love
-    eval "${input:+pv $input |} awk '{
-      srand(\$$mapcolumn);
-      print \$0 >>\"$jobpath/out/\"int(rand() * $host_idx);
-    }
-    END {
-      for (i = 0; i != $host_idx; ++i)
-        printf \"\" >>\"$jobpath/out/\"i;
-    }'"
-fi
+	eval "${input:+pv $input |} awk '{
+            srand(\$$mapcolumn);
+            print \$0 >>\"$jobpath/out/\"int(rand() * $host_idx);
+        }
+        END {
+            for (i = 0; i != $host_idx; ++i)
+            printf \"\" >>\"$jobpath/out/\"i;
+        }'"
+    fi
 
-# save it somewhere
+    ####    
+    # save it somewhere
+    # use sort -m. 
+    # (abolished brm to simplify the software since i couldn't convince myself there is a big performance gain)
+    # sort -m creates tmp files if too many input files are specified
+    # brm doesn't do this
+    eval "sort $sort_opt -k$mapcolumn,$mapcolumn -m $jobpath/in/* ${output:+| pv >$output}"
+    
+    ####    
+    # finally, clean up after ourselves
+    rm -rf $jobpath
+    for host in $hosts; do
+	ssh $host "rm -rf $nodepath"
+    done
+    
+    ####    
+    # TODO: is there a safe way to kill subprocesses upon fail?
+    # this seems to work: /bin/kill -- -$$
+}
 
-# use sort -m. 
-# (abolished brm to simplify the software since i couldn't convince myself there is a big performance gain)
-# sort -m creates tmp files if too many input files are specified
-# brm doesn't do this
-eval "sort $sort_opt -k$mapcolumn,$mapcolumn -m $jobpath/in/* ${output:+| pv >$output}"
-
-# finally, clean up after ourselves
-rm -rf $jobpath
-for host in $hosts; do
-    ssh $host "rm -rf $nodepath"
-done
-
-# TODO: is there a safe way to kill subprocesses upon fail?
-# this seems to work: /bin/kill -- -$$
+bashr_paramcheck "$@"
+bashr_init
+bashr_executetask;
