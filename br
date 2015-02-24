@@ -7,13 +7,13 @@
 
 usage() {
   local prog="`basename $1`"
-  echo "Usage: $prog [-m host1 [host2...]] [-c column] [-u userfunc] [-i input] [-o output]"
+  echo "Usage: $prog [-m host1 [host2...]] [-c column] [-r userfunc] [-i input] [-o output]"
   echo "       $prog -h for help."
   exit 2
 }
 
 showhelp() {
-  echo "Usage: `basename $1`: [-m host1 [host2...]] [-c column] [-u userfunc] [-i input] [-o output]"
+  echo "Usage: `basename $1`: [-m host1 [host2...]] [-c column] [-r userfunc] [-i input] [-o output]"
   echo   "bashreduce.  Map an input file to many hosts, sort/reduce, merge"
   echo   "  -m: hosts to use, can repeat hosts for multiple cores"
   echo   "      default hosts from ~/.br.hosts or /etc/br.hosts"
@@ -40,15 +40,13 @@ showhelp() {
 # local
 bashr_paramcheck() {
     ${LC_ALL:=""}
-    ${BRHOSTS:=""}
-    
-    brhostsfile="/etc/br.hosts"
+    local brhostsfile="/etc/br.hosts"
     [ -e "$HOME/.br.hosts" ] && brhostsfile="$HOME/.br.hosts"
     base_port=8192
     job_idx=0
     mode='compat'
     interpreter='sh -c'
-    hosts=$BRHOSTS
+    hosts=
     mapcolumn=1
     userfunc=
     input=
@@ -77,24 +75,22 @@ bashr_paramcheck() {
 	    [?])  usage $0;;
 	esac
     done 
-    if [ -n $hosts ]; then
-	if [ -e $brhostsfile ]; then
-	    hosts=`cat $brhostsfile`
+    if [ -z "$hosts" ]; then
+	if [ -e "$brhostsfile" ]; then
+	    hosts=`cat "$brhostsfile"`
 	fi
     fi
     # check if 'hosts' is set.
-    hosts=${hosts:?"`basename $0`: must specify hosts with -m or provide BRHOSTS, ~/.br.hosts, or /etc/br.hosts"}
+    hosts=${hosts:?"`basename $0`: must specify hosts with -m or provide ~/.br.hosts or /etc/br.hosts"}
     case "$mode" in
 	compat|map|reduce)
+            ;;
+        debug)
             ;;
 	*)
             echo "`basename $0`: unknown mode is specified. ($mode)"
             usage $0
     esac
-    if [ $mode != 'compat' ] && [ -z "$userfunc" ]; then
-	echo "`basename $0`: $mode is specified. must specify userfunc with -r"
-	usage $0
-    fi
     jobid=${jobid:-"`uuidgen`"}
 
     # okay let's get started!  first we need a name for our job
@@ -106,49 +102,61 @@ bashr_paramcheck() {
 #   
 # * out
 #   sorter
-#   reducer
-#   mapper
+#   userfunc
 # * tmp (local)
 #   
 bashr_init() {
     sorter="LC_ALL='$LC_ALL' sort -S$sort_mem $sort_opt -T$tmp_dir -k$mapcolumn,$mapcolumn 2>/dev/null"
+    usercode=
     case $mode in 
 	map)
+            if [[ -z $userfunc ]]; then
+ 		echo "`basename $0`: $mode is specified. must specify userfunc with -r"
+		usage $1
+            fi
+	    usercode='{
+                cmd=sprintf("%s %c%s%c", ENVIRON["INTERPRETER"], 39, ENVIRON["USERFUNC"], 39);
+                print | cmd; 
+            }'
             ;;
 	reduce)
+            if [[ -z $userfunc ]]; then
+ 		echo "`basename $0`: $mode is specified. must specify userfunc with -r"
+		usage $1
+            fi
+	    usercode='BEGIN {
+                cmd=sprintf("%s %c%s%c", ENVIRON["INTERPRETER"], 39, ENVIRON["USERFUNC"], 39);
+                firsttime=1;
+                key="";
+                keyindex=ENVIRON["MAPCOLUMN"];
+            }
+            {
+                if (key!=$keyindex) {
+                  if (firstTime!=1) {
+                      close(cmd); 
+                  }
+                }
+                print | cmd;
+                fisttime=0;
+                key=$keyindex;
+            }
+            END {
+                if (firsttime==0) {
+                    close(cmd);
+                }
+            }'
             ;;
 	compat)
-	    if [ -n "$userfunc" ]; then
+	    if [ -z "$userfunc" ]; then
 	    # if we have a userfunc, add the pipe explicitly
-		userfunc="| $interpreter '$userfunc' 2> $errlog"
+		usercode="| $interpreter '$userfunc' 2> $errlog"
 	    fi
     esac
-    reducer='BEGIN {
-        prevkey="";
-        cmd=sprintf("%s %c%s%c", ENVIRON["interpreter"], 39, ENVIRON["userfunc"], 39);
-    }
-    {
-        key=$ENVIRON["mapcolumn"];
-        ENVIRON["BASHR_KEY"]=key;
-        if (prevkey !="" && prevkey != key) { 
-          close(cmd); 
-        }
-        line=key;
-        for (i=1; i <=NF; i++) {
-            if (i!=ENVIRON["mapcolumn"]) {
-              line=sprintf("%s%s%s",line,FS,$i);
-            }
-        }
-        print line | cmd;
-        prevkey=key;
-    }
-    END {
-        close(prev);
-    }'
-    mapper='{
-        cmd=sprintf("%s %c%s%c", ENVIRON["interpreter"], 39, ENVIRON["userfunc"], 39);
-        print | cmd; 
-    }'
+}
+
+bashr_debug() {
+    echo "mode:"  ${mode//\n/ }
+    echo "hosts:" ${hosts//\n/ }
 }
 
 # Executes a map/reduce/comat task
@@ -160,8 +168,6 @@ bashr_init() {
 #   mapcolumn
 #   userfunc
 #   sort_opt
-#   mapper
-#   reducer
 #   sorter
 #   jobpath
 #   nodepath 
@@ -192,24 +198,18 @@ bashr_executetask() {
         # lets get the pid of our listener
 	ssh -n $host "mkdir -p $nodepath"
 	pid=$(ssh -n $host "nc -l -p $port_out >$nodepath/in_$host_idx 2>/dev/null </dev/null & jobs -l" | awk {'print $2'})
-	envvars="mapcolumn=$mapcolumn userfunc='$userfunc' interpreter='$interpreter'"
+	envvars="MAPCOLUMN=$mapcolumn INTERPRETER='$interpreter' USERFUNC='$userfunc'"
 	case "$mode" in
-            map)
+            map|reduce)
 		ssh $host -n \
 		    "tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
-                | $envvars awk '$mapper' | $sorter \
-                | nc -q0 -l -p $port_in >&/dev/null &"
-		;;
-	    reduce)
-		ssh $host -n \
-		    "tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
-                | $envvars awk '$reducer' | $sorter \
+                | $envvars awk '$usercode' | $sorter \
                 | nc -q0 -l -p $port_in >&/dev/null &"
 		;;
             compat|*)
 		ssh $host -n \
 		    "tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
-                | $sorter $userfunc \
+                | $sorter $usercode \
                 | nc -q0 -l -p $port_in >&/dev/null &"
 		;;
 	esac
@@ -265,4 +265,9 @@ bashr_executetask() {
 
 bashr_paramcheck "$@"
 bashr_init
-bashr_executetask;
+
+if [ $mode == "debug" ]; then
+    bashr_debug;
+else
+    bashr_executetask;
+fi
