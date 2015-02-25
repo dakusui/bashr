@@ -28,6 +28,8 @@ showhelp() {
   echo   "  -t: tmp dir to use, default = /tmp"
   echo   "  -l: error log file, default = /dev/null"
   echo   "  -S: memory to use for sort, default = 256M"
+  echo   "  -s: extra parameter(s) given to 'sort' command, default =  "
+  echo   "  -O: perform sort on output, ignored in 'compat' mode., default = yes"
   echo   "  -h: this help message"
   exit 2
 } 
@@ -54,9 +56,10 @@ bashr_paramcheck() {
     tmp_dir=/tmp
     sort_mem=256M
     sort_opt=
+    sort_on_out=yes
     errlog='/dev/null'
 
-    while getopts "m:p:j:M:I:c:r:i:o:t:S:s:l:h" name; do
+    while getopts "m:p:j:M:I:c:r:i:o:t:S:s:O:l:h" name; do
 	case $name in
 	    m)  hosts=$OPTARG;;
 	    p)  baseport=$OPTARG;;
@@ -70,6 +73,7 @@ bashr_paramcheck() {
 	    t)  tmp_dir=$OPTARG;;
 	    S)  sort_mem=$OPTARG;;
 	    s)  sort_opt=$OPTARG;;
+            O)  sort_on_out=$OPTARG;;
 	    l)  errlog=$OPTARG;;
 	    h)  showhelp $0;;
 	    [?])  usage $0;;
@@ -181,6 +185,7 @@ bashr_debug() {
 #   port_out
 #   host_idx
 #   out_files
+#   in_files
 #   input
 bashr_executetask() {
     # now, for each host, set up in and out fifos (and a netcat for each), and ssh to each host to set up workers listening on netcat
@@ -189,16 +194,17 @@ bashr_executetask() {
     port_out=$(($port_in + 1))
     mkdir -p $jobpath/{in,out}
 
-    host_idx=0
-    out_files=
+    local host_idx=0
+    local out_files=
+    local in_files=
     
     for host in $hosts; do
         # our named pipes
 	mkfifo $jobpath/{in,out}/$host_idx
         # lets get the pid of our listener
 	ssh -n $host "mkdir -p $nodepath"
-	pid=$(ssh -n $host "nc -l -p $port_out >$nodepath/in_$host_idx 2>/dev/null </dev/null & jobs -l" | awk {'print $2'})
-	envvars="MAPCOLUMN=$mapcolumn INTERPRETER='$interpreter' USERFUNC='$userfunc'"
+	local pid=$(ssh -n $host "nc -l -p $port_out >$nodepath/in_$host_idx 2>/dev/null </dev/null & jobs -l" | awk {'print $2'})
+	local envvars="MAPCOLUMN=$mapcolumn INTERPRETER='$interpreter' USERFUNC='$userfunc' HOST_IDX='$host_idx'"
 	case "$mode" in
             map|reduce)
 		ssh $host -n \
@@ -218,6 +224,7 @@ bashr_executetask() {
 	nc -q0 $host $port_out <$jobpath/out/$host_idx &
         # our vars
 	out_files="$out_files $jobpath/out/$host_idx"
+	in_files="$in_files $jobpath/in/$host_idx"
 	port_in=$(($port_in + 2))
 	port_out=$(($port_in + 1))
 	host_idx=$(($host_idx + 1))
@@ -249,7 +256,11 @@ bashr_executetask() {
     # (abolished brm to simplify the software since i couldn't convince myself there is a big performance gain)
     # sort -m creates tmp files if too many input files are specified
     # brm doesn't do this
-    eval "sort $sort_opt -k$mapcolumn,$mapcolumn -m $jobpath/in/* ${output:+| pv >$output}"
+    if [ $sort_on_out == "yes" ] ; then
+	eval "sort $sort_opt -k$mapcolumn,$mapcolumn -m $in_files ${output:+| pv >$output}"
+    else
+	eval "cat $in_files ${output:+| pv >$output}"
+    fi
     
     ####    
     # finally, clean up after ourselves

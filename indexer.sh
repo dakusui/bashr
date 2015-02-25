@@ -1,13 +1,14 @@
 #!/bin/bash
 
-# find /home/hiroshi/Documents/IdeaProjects/jcunit/ -type f -name '*.java' |\
-echo ~/Documents/IdeaProjects/bashreduce/../jcunit/src/main/java/com/github/dakusui/jcunit/fsm/Action.java |\
+find /home/hiroshi/Documents/IdeaProjects/jcunit/ -type f -name '*.java' |\
 cat -n |\
 tee docid.txt |\
-br -s '-n' -M map -j 0 -I 'awk' -r '{
+br -c 3 -M map -j 0 -I 'awk' -r '{
   l=1;
   while(( getline line<$2) > 0 ) {
-     n=split(line,cols);
+     sub(/[[:punct:]]/, " ", line);
+     sub(/[[:blank:]]+/, " ", line);
+     n=split(line,cols," ");
      for (i = 1; i < n; i++) {
          print $1,l,cols[i]
      }
@@ -15,13 +16,19 @@ br -s '-n' -M map -j 0 -I 'awk' -r '{
   }
 }' |\
 tee terms.txt |\
-br -s '-n' -c 3 -M reduce -j 1 -I 'awk' -r 'BEGIN {
+br -c 3 -s '-n' -O no -M reduce -j 1 -I 'awk' -r 'BEGIN {
+    p=""
+    key=""
 }
 {
-    print $0;
+    if (key == "") {
+        key=$3;
+    }
+    p=p " " $1 "," $2
 }
 END {
-}'
+    print "" key " [" ENVIRON["HOST_IDX"] "] " p;
+}' -o index.txt
 
 
 
