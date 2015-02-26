@@ -1,0 +1,324 @@
+#!/bin/bash -eu
+
+
+################################################################################
+# 
+#   'bred': 'bashreduce', mapreduce in bash (by erik@fawx.com), enhanced
+#   * dakusui@gmail.com
+#
+#   Feb/26/2015 Changes from 'bashreduce':
+#   * Abolished 'brm': I gave up making it consistent with 'sort -m'.
+#   * Created 'map' and 'reduce' behaviour modes, which allow you to perform
+#     tasks more normal mapreduce way. The behavior erikfrey created is now 
+#     called 'compat' and it is a default.
+#   * Made it possible to specify job_id (-j option) by an integer. Based on this
+#     number bred allocates ports to be used and now you can use bred multiple 
+#     times in a command line connecting them pipes.
+#   * Made it possible to specify base port.
+#   * Added 'sort_opt' option to be able to make sort commands use it. This is
+#     useful e.g., when you want to sort the output by a numeric field. Use "-s '-n'"
+#   * Reorganized internal structure.
+# 
+################################################################################
+
+usage() {
+    local prog="`basename $1`"
+    echo "Usage: $prog [-m host1 [host2...]] [-c column] [-r userfunc] [-i input] [-o output]"
+    echo "       $prog -h for help."
+    exit 2
+}
+
+showhelp() {
+    echo "Usage: `basename $1`: [-m host1 [host2...]] [-c column] [-r userfunc] [-i input] [-o output]"
+    echo   "bashreduce.  Map an input file to many hosts, sort/reduce, merge"
+    echo   "  -m: hosts to use, can repeat hosts for multiple cores"
+    echo   "      default hosts from ~/.br.hosts or /etc/br.hosts"
+    echo   "  -p: base port, default = 8192"
+    echo   "  -M: mode ('map', 'reduce', 'compat'), default = 'compat'"
+    echo   "  -I: interpreter. ignored if 'compat' mode is used, default = 'sh -c'"
+    echo   "  -j: job index, default = 0"
+    echo   "  -c: column to partition, default = 1 (1-based)"
+    echo   "  -i: input file, default = stdin"
+    echo   "  -r: userfunc function, default = identity"
+    echo   "  -o: output file, default = stdout"
+    echo   "  -t: tmp dir to use, default = /tmp"
+    echo   "  -l: error log file, default = /dev/null"
+    echo   "  -S: memory to use for sort, default = 256M"
+    echo   "  -s: extra parameter(s) given to 'sort' command, default =  "
+    echo   "  -O: perform sort on output, ignored in 'compat' mode., default = yes"
+    echo   "  -h: this help message"
+    exit 2
+} 
+
+
+# int
+#   
+# out
+#   jobid    "${OPTARG:-$(uuid)}"
+#   jobpath  "${tmp_dir:-/tmp}/br_job_${jobid}}"
+#   nodepath "${tmp_dir:-/tmp}/br_node_${jobid}}"
+# local
+bashr_paramcheck() {
+    ${LC_ALL:=""}
+    local brhostsfile="/etc/br.hosts"
+    [ -e "$HOME/.br.hosts" ] && brhostsfile="$HOME/.br.hosts"
+    base_port=8192
+    job_idx=0
+    mode='compat'
+    interpreter='sh -c'
+    hosts=
+    mapcolumn=1
+    userfunc=
+    input=
+    output=
+    tmp_dir=/tmp
+    sort_mem=256M
+    sort_opt=
+    sort_on_out=yes
+    errlog='/dev/null'
+    
+    while getopts "m:p:j:M:I:c:r:i:o:t:S:s:O:l:h" name; do
+	case $name in
+	    m)  hosts=$OPTARG;;
+	    p)  baseport=$OPTARG;;
+	    j)  job_idx=$OPTARG;;
+	    M)  mode=$OPTARG;;
+            I)  interpreter=$OPTARG;;
+	    c)  mapcolumn=$OPTARG;;
+	    r)  userfunc=$OPTARG;;
+	    i)  input=$OPTARG;;
+	    o)  output=$OPTARG;;
+	    t)  tmp_dir=$OPTARG;;
+	    S)  sort_mem=$OPTARG;;
+	    s)  sort_opt=$OPTARG;;
+            O)  sort_on_out=$OPTARG;;
+	    l)  errlog=$OPTARG;;
+	    h)  showhelp $0;;
+	    [?])  usage $0;;
+	esac
+    done 
+    if [ -z "$hosts" ]; then
+	if [ -e "$brhostsfile" ]; then
+	    hosts=`cat "$brhostsfile"`
+	fi
+    fi
+    # check if 'hosts' is set.
+    hosts=${hosts:?"`basename $0`: must specify hosts with -m or provide ~/.br.hosts or /etc/br.hosts"}
+    case "$mode" in
+	compat|map|reduce)
+            ;;
+	debug)
+            ;;
+	*)
+            echo "`basename $0`: unknown mode is specified. ($mode)"
+            usage $0
+    esac
+    jobid=${jobid:-"`uuidgen`"}
+}
+
+# * in
+#   mode (param[1])
+#   host_idx (param[1])
+#   LC_ALL (from env)
+#   mapcolumn (from opt)
+#   interpreter (from opt)
+#   userfunc (from opt)
+#   sort_opt (from opt)
+#   sort_mem (from opt)
+#   tmp_dir (from opt)
+# * out
+#   task
+# * tmp (local)
+#   sorter
+#   usercode
+#   envvars
+bashr_compose_task() {
+    # mode: 'map', 'reduce', 'compat'
+    mode=$1
+    host_idx=$2
+    sorter="LC_ALL='$LC_ALL' sort -S$sort_mem $sort_opt -T$tmp_dir -k$mapcolumn,$mapcolumn 2>/dev/null"
+    local usercode=
+    local envvars="MAPCOLUMN=$mapcolumn INTERPRETER='$interpreter' USERFUNC='$userfunc' HOST_IDX='$host_idx'"
+    case $mode in 
+	map)
+            if [[ -z $userfunc ]]; then
+ 		echo "`basename $0`: $mode is specified. must specify userfunc with -r"
+		usage $1
+            fi
+	    usercode='{
+                cmd=sprintf("%s %c%s%c", ENVIRON["INTERPRETER"], 39, ENVIRON["USERFUNC"], 39);
+                print | cmd; 
+            }'
+            task="$envvars awk '$usercode' | $sorter"
+            ;;
+	reduce)
+            if [[ -z $userfunc ]]; then
+ 		echo "`basename $0`: $mode is specified. must specify userfunc with -r"
+		usage $1
+            fi
+	    usercode='BEGIN {
+                cmd=sprintf("%s %c%s%c", ENVIRON["INTERPRETER"], 39, ENVIRON["USERFUNC"], 39);
+                firsttime=1;
+                key="";
+                keyindex=ENVIRON["MAPCOLUMN"];
+            }
+            {
+                if (key!=$keyindex) {
+                  if (firstTime!=1) {
+                      close(cmd); 
+                  }
+                }
+                print | cmd;
+                fisttime=0;
+                key=$keyindex;
+            }
+            END {
+                if (firsttime==0) {
+                    close(cmd);
+                }
+            }'
+            task="$envvars awk '$usercode' | $sorter"
+            ;;
+	compat)
+	    if [ -n "$userfunc" ]; then
+	    # if we have a userfunc, add the pipe explicitly
+		usercode="| $userfunc 2> $errlog"
+            else
+                usercode=""
+	    fi
+            task="$sorter $usercode"
+            ;;
+        *)
+            echo "Unknown mode '$1' was given."
+            exit 1
+            ;;
+    esac
+}
+
+bashr_debug() {
+    echo "mode:"  ${mode//\n/ }
+    echo "hosts:" ${hosts//\n/ }
+}
+
+# Executes a map/reduce/compat task
+# 
+# variables:
+# * read
+#   hosts (from opt)
+#   mode (from opt)
+#   mapcolumn (from opt)
+#   userfunc (from opt)
+#   sort_opt (from opt)
+#   sorter
+#   tmp_dir
+# * write
+#   (none)
+# * local
+#   host
+#   pid
+#   envvars
+#   port_in
+#   port_out
+#   host_idx
+#   out_files
+#   in_files
+#   input
+#   num_hosts
+bashr_executetask() {
+    # okay let's get started!  first we need a name for our job
+    local jobpath="$tmp_dir/br_job_$jobid"
+    local nodepath="$tmp_dir/br_node_$jobid"
+    local num_hosts=$(($(echo "$hosts" | wc -w)))
+    local port_in=$(($base_port + $num_hosts * $job_idx * 2))
+    local port_out=$(($port_in + 1))
+    local host_idx=0
+    local out_files=
+    local in_files=
+    
+    # now, for each host, set up in and out fifos (and a netcat for each), and ssh to each host to set up workers listening on netcat
+    mkdir -p $jobpath/{in,out}
+    for host in $hosts; do
+        ####
+        # set up communication path
+        # 1) master side
+	#    our named pipes
+	mkfifo $jobpath/{in,out}/$host_idx
+        # 2) slave size
+	ssh -n $host "mkdir -p $nodepath"
+        #    let's start the remote 'nc' listener and get the pid of it
+	local pid=$(ssh -n $host "nc -l -p $port_out >$nodepath/in_$host_idx 2>/dev/null </dev/null & jobs -l" | awk {'print $2'})
+
+        ####
+        # start task process on remote side and connect to it to the listener
+        # 1) compose 'task' component based on execution mode (map, reduce, or compat)
+	bashr_compose_task "$mode" "$host_idx"
+        # 2) start the task.
+	ssh $host -n \
+	    "tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
+                | $task \
+                | nc -q0 -l -p $port_in >&/dev/null &"
+
+        ####
+        # Connect the task to the local forwarder of master side's
+        # our local forwarders
+	nc $host $port_in >$jobpath/in/$host_idx &
+	nc -q0 $host $port_out <$jobpath/out/$host_idx &
+        # our vars
+	out_files="$out_files $jobpath/out/$host_idx"
+	in_files="$in_files $jobpath/in/$host_idx"
+	port_in=$(($port_in + 2))
+	port_out=$(($port_in + 1))
+	host_idx=$(($host_idx + 1))
+    done
+    
+    ####    
+    # okay, time to map
+    if which brp >/dev/null; then
+	eval "${input:+pv $input |} brp - $(($mapcolumn - 1)) $out_files"
+    else
+        ####    
+        # use awk if we don't have 'brp'
+	# we're taking advantage of a special property that awk leaves its file handles open until its done
+	# i think this is universal
+	# we're also sending a zero length string to all the handles at the end, in case some pipe got no love
+	eval "${input:+pv $input |} awk '{
+            srand(\$$mapcolumn);
+            print \$0 >>\"$jobpath/out/\"int(rand() * $host_idx);
+        }
+        END {
+            for (i = 0; i != $host_idx; ++i)
+            printf \"\" >>\"$jobpath/out/\"i;
+        }'"
+    fi
+
+    ####    
+    # save it somewhere
+    # use sort -m. 
+    # (dakusui: abolished brm to simplify the software since i couldn't convince myself there is a big performance gain)
+    # sort -m creates tmp files if too many input files are specified
+    # brm doesn't do this
+    if [ $sort_on_out == "yes" ] ; then
+	eval "sort $sort_opt -k$mapcolumn,$mapcolumn -m $in_files ${output:+| pv >$output}"
+    else
+	eval "cat $in_files ${output:+| pv >$output}"
+    fi
+    
+    ####    
+    # finally, clean up after ourselves
+    rm -rf $jobpath
+    for host in $hosts; do
+	ssh $host "rm -rf $nodepath"
+    done
+    
+    ####    
+    # TODO: is there a safe way to kill subprocesses upon fail?
+    # this seems to work: /bin/kill -- -$$
+}
+
+bashr_paramcheck "$@"
+
+if [ $mode == "debug" ]; then
+    bashr_debug;
+else
+    bashr_executetask;
+fi
