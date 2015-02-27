@@ -1,10 +1,33 @@
-# bashreduce : mapreduce in a bash script
+# bred : bashreduce enhanced.
 
-bashreduce lets you apply your favorite unix tools in a mapreduce fashion across multiple machines/cores.  There's no installation, administration, or distributed filesystem.  You'll need:
+```bred``` is an enhanced version of ```bashreduce```, which is created by  erikfrey (by erik@fawx.com).
+And it is mapreduce in a bash script.
+
+## About ```bashreduce```
+```bashreduce``` lets you apply your favorite unix tools in a mapreduce fashion across multiple machines/cores.  There's no installation, administration, or distributed filesystem.  You'll need:
 
 * "br":http://github.com/erikfrey/bashreduce/blob/master/br somewhere handy in your path
 * vanilla unix tools: sort, awk, ssh, netcat, pv
 * password-less ssh to each machine you plan to use
+
+## About enhancements
+Below are the enhancements made in ```bred```
+
+* Created 'map' and 'reduce' behaviour modes, which allow you to perform
+  tasks more normal mapreduce way. The behavior erikfrey created is now
+  called 'compat' and it is a default.
+* Made it possible to specify job_id (-j option) by an integer. Based on this
+  number bred allocates ports to be used and now you can use bred multiple
+  times in a command line connecting them pipes.
+* Made it possible to specify base port.
+* Added 'sort_opt' option to be able to make sort commands use it. This is
+  useful e.g., when you want to sort the output by a numeric field. Use "-s '-n'"
+* Reorganized internal structure.
+
+And one more difference from ```bashreduce``` is
+* Abolished 'brm': I gave up making it consistent with 'sort -m'.
+
+# Installation
 
 # Configuration
 
@@ -35,20 +58,25 @@ br -r "uniq -c" < input > output
 LC_ALL='C' br -r "join - /tmp/join_data" < input > output
 ```
 
+## distributed indexing
+
+You can perform distributed indexing with the code found in [examples/indexer.sh]
+
+
 # Performance
 
 ## big honkin' local machine
 
 Let's start with a simpler scenario: I have a machine with multiple cores and with normal unix tools I'm relegated to using just one core.  How does br help us here?  Here's br on an 8-core machine, essentially operating as a poor man's multi-core sort:
 
-```
 
 | command                                    | using     | time       | rate      |
+|:-------------------------------------------|-----------|------------|-----------|
 | sort -k1,1 -S2G 4gb_file > 4gb_file_sorted | coreutils | 30m32.078s | 2.24 MBps |
 | br -i 4gb_file -o 4gb_file_sorted          | coreutils | 11m3.111s  | 6.18 MBps |
 | br -i 4gb_file -o 4gb_file_sorted          | brp/brm   | 7m13.695s  | 9.44 MBps |
 
-```
+
 The job completely i/o saturates, but still a reasonable gain!
 
 ## many cheap machines
