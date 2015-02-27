@@ -1,6 +1,7 @@
 #!/bin/bash
 
-find ${1:-$(pwd)} -type f -name ${2:-"*.txt"} |\
+eval dir=${1:-$(pwd)}
+find $dir -type f -name ${2:-"*.txt"} |\
 cat -n |pv | tee docid.txt |\
 bred -c 3 -M map -j 0 -I 'awk' -r '{
   l=1;
