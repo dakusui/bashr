@@ -44,7 +44,7 @@ showhelp() {
     echo   "  -t: tmp dir to use, default = /tmp"
     echo   "  -l: error log file, default = /dev/null"
     echo   "  -S: memory to use for sort, default = 256M"
-    echo   "  -s: extra parameter(s) given to 'sort' command, default =  "
+    echo   "  -s: column to sort on reduce. 'sort' command, default is equal to -c "
     echo   "  -O: perform sort on output, ignored in 'compat' mode., default = yes"
     echo   "  -h: this help message"
     exit 2
@@ -58,7 +58,7 @@ showhelp() {
 #   jobpath  "${tmp_dir:-/tmp}/br_job_${jobid}}"
 #   nodepath "${tmp_dir:-/tmp}/br_node_${jobid}}"
 # local
-bashr_paramcheck() {
+bashr_parseopt() {
     ${LC_ALL:=""}
     local brhostsfile="/etc/br.hosts"
     [ -e "$HOME/.br.hosts" ] && brhostsfile="$HOME/.br.hosts"
@@ -73,7 +73,7 @@ bashr_paramcheck() {
     output=
     tmp_dir=/tmp
     sort_mem=256M
-    sort_opt=
+    sort_column=
     sort_on_out=yes
     errlog='/dev/null'
     
@@ -90,7 +90,7 @@ bashr_paramcheck() {
 	    o)  output=$OPTARG;;
 	    t)  tmp_dir=$OPTARG;;
 	    S)  sort_mem=$OPTARG;;
-	    s)  sort_opt=$OPTARG;;
+	    s)  sort_column=$OPTARG;;
             O)  sort_on_out=$OPTARG;;
 	    l)  errlog=$OPTARG;;
 	    h)  showhelp $0;;
@@ -102,6 +102,7 @@ bashr_paramcheck() {
 	    hosts=`cat "$brhostsfile"`
 	fi
     fi
+    sort_column=${sort_column:-$mapcolumn}
     # check if 'hosts' is set.
     hosts=${hosts:?"`basename $0`: must specify hosts with -m or provide ~/.br.hosts or /etc/br.hosts"}
     case "$mode" in
@@ -123,7 +124,6 @@ bashr_paramcheck() {
 #   mapcolumn (from opt)
 #   interpreter (from opt)
 #   userfunc (from opt)
-#   sort_opt (from opt)
 #   sort_mem (from opt)
 #   tmp_dir (from opt)
 # * out
@@ -136,7 +136,7 @@ bashr_compose_task() {
     # mode: 'map', 'reduce', 'compat'
     mode=$1
     host_idx=$2
-    sorter="LC_ALL='$LC_ALL' sort -S$sort_mem $sort_opt -T$tmp_dir -k$mapcolumn,$mapcolumn 2>/dev/null"
+    sorter="LC_ALL='$LC_ALL' sort -S$sort_mem -T$tmp_dir -k$sort_column,$sort_column 2>/dev/null"
     local usercode=
     local envvars="MAPCOLUMN=$mapcolumn INTERPRETER='$interpreter' USERFUNC='$userfunc' HOST_IDX='$host_idx'"
     case $mode in 
@@ -208,7 +208,7 @@ bashr_debug() {
 #   mode (from opt)
 #   mapcolumn (from opt)
 #   userfunc (from opt)
-#   sort_opt (from opt)
+#   sort_column (from opt)
 #   sorter
 #   tmp_dir
 # * write
@@ -298,7 +298,7 @@ bashr_executetask() {
     # sort -m creates tmp files if too many input files are specified
     # brm doesn't do this
     if [ $sort_on_out == "yes" ] ; then
-	eval "sort $sort_opt -k$mapcolumn,$mapcolumn -m $in_files ${output:+| pv >$output}"
+	eval "sort -k$sort_column,$sort_column -m $in_files ${output:+| pv >$output}"
     else
 	eval "cat $in_files ${output:+| pv >$output}"
     fi
@@ -315,7 +315,7 @@ bashr_executetask() {
     # this seems to work: /bin/kill -- -$$
 }
 
-bashr_paramcheck "$@"
+bashr_parseopt "$@"
 
 if [ $mode == "debug" ]; then
     bashr_debug;

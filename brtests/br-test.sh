@@ -77,6 +77,17 @@ function bredcheckenv_passwordless_ssh_is_ok() {
     fi
 }
 
+function bredcheckenv_brp_is_installed() {
+    if [ $1 == 'expected' ]; then
+        echo '1'
+    elif [ $1 == 'actual' ]; then
+	which brp | wc -l
+    else
+        echo "Invalid mode $1 is specified"
+        exit 1
+    fi
+}
+
 
 ####
 # verify reducer is working
@@ -94,7 +105,7 @@ function bredtest_1reducer() {
 3 END'
     elif [ $1 == 'actual' ]; then
 	printf "03 A\n02 A\n01 B\n01 C\n" | \
-	"$DIRNAME"/bred -m "localhost" -j 0 -M reduce -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'
+	"$SUT" -m "localhost" -j 0 -M reduce -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'
     else
         echo "Invalid mode $1 is specified"
         exit 1
@@ -105,19 +116,13 @@ function bredtest_1reducer() {
 # verify 2 reducers are working
 function bredtest_2reducers() {
     if [ $1 == 'expected' ]; then
-	echo '0 BEGIN
-0 BEGIN
-0 BEGIN
-1 MAIN 01 B
-1 MAIN 02 A
-1 MAIN 03 A
-2 END
-2 END
-2 MAIN 01 C
-3 END'
+	echo '1 MAIN 01 B z
+1 MAIN 02 A zz
+1 MAIN 03 A x
+2 MAIN 01 C y'
     elif [ $1 == 'actual' ]; then
-	printf "03 A\n02 A\n01 B\n01 C\n" | \
-	"$DIRNAME"/bred -m "localhost localhost" -j 0 -M reduce -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'
+	printf "03 A x\n02 A zz\n01 B z\n01 C y\n" | \
+	"$SUT" -m "localhost localhost" -j 0 -M reduce -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' | grep "MAIN" | sort
     else
         echo "Invalid mode $1 is specified"
         exit 1
@@ -128,15 +133,13 @@ function bredtest_2reducers() {
 # verify 2 reducers are working with the thrid column as key
 function bredtest_2reducersK3() {
     if [ $1 == 'expected' ]; then
-	echo '0 BEGIN
-5 END
-3 MAIN 01 B
-4 MAIN 01 C
-2 MAIN 02 A
-1 MAIN 03 A'
+	echo '1 MAIN 03 A x
+1 MAIN 01 C y
+1 MAIN 01 B z
+1 MAIN 02 A zz'
     elif [ $1 == 'actual' ]; then
-	printf "03 A\n02 A\n01 B\n01 C\n" | \
-	"$DIRNAME"/bred -c 3 -m "localhost localhost" -j 0 -M reduce -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'
+	printf "03 A x\n02 A zz\n01 B z\n01 C y\n" | \
+	"$SUT" -c 3 -m "localhost localhost" -j 0 -M reduce -s 5 -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' | grep "MAIN"
     else
         echo "Invalid mode $1 is specified"
         exit 1
@@ -155,7 +158,7 @@ function bredtest_1mapper() {
 5 END'
     elif [ $1 == 'actual' ]; then
 	printf "03 A\n02 A\n01 B\n01 C\n" | \
-	"$DIRNAME"/bred -m "localhost" -j 0 -M map -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'
+	"$SUT" -m "localhost" -j 0 -M map -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'
     else
         echo "Invalid mode $1 is specified"
         exit 1
@@ -176,7 +179,7 @@ function bredtest_2mappers() {
 4 END'
     elif [ $1 == 'actual' ]; then
 	printf "03 A\n02 A\n01 B\n01 C\n" | \
-	"$DIRNAME"/bred -m "localhost localhost" -j 0 -M map -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'
+	"$SUT" -m "localhost localhost" -j 0 -M map -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'
     else
         echo "Invalid mode $1 is specified"
         exit 1
@@ -193,7 +196,7 @@ function bredtest_default_sort_default_column() {
 03 A'
     elif [ $1 == 'actual' ]; then
 	printf "03 A\n02 A\n01 B\n01 C\n" | \
-	"$DIRNAME"/bred -m "localhost localhost" -j 0
+	"$SUT" -m "localhost localhost" -j 0
     else
         echo "Invalid mode $1 is specified"
         exit 1
@@ -210,7 +213,7 @@ function bredtest_default_sort_2nd_column() {
 01 C'
     elif [ $1 == 'actual' ]; then
 	printf "03 A\n02 A\n01 B\n01 C\n" | \
-	"$DIRNAME"/bred -m "localhost localhost" -j 0 -c 2
+	"$SUT" -m "localhost localhost" -j 0 -c 2
     else
         echo "Invalid mode $1 is specified"
         exit 1
@@ -219,17 +222,16 @@ function bredtest_default_sort_2nd_column() {
 
 ####
 # verify 2 mappers are working with the third column specified as a key
-function bredtest_2mappersK3() {
+function bredtest_2mappersK2() {
     if [ $1 == 'expected' ]; then
-	echo '0 BEGIN
-5 END
-3 MAIN 01 B
-4 MAIN 01 C
+	echo '1 MAIN 01 B
+1 MAIN 03 A
 2 MAIN 02 A
-1 MAIN 03 A'
+3 MAIN 01 C
+' | sort -k 1,4
     elif [ $1 == 'actual' ]; then
 	printf "03 A\n02 A\n01 B\n01 C\n" | \
-	"$DIRNAME"/bred -m "localhost localhost" -j 0 -c 3 -M map -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'
+	"$SUT" -m "localhost localhost" -j 0 -c 2 -M map -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' | grep MAIN | sort -k 1,4
     else
         echo "Invalid mode $1 is specified"
         exit 1
@@ -246,7 +248,24 @@ function bredtest_compat_wordcount() {
       2 world'
     elif [ $1 == 'actual' ]; then
 	printf "hello\nworld\neveryone\nhello\nhello\none\nworld" | \
-	"$DIRNAME"/bred -m "localhost localhost" -M compat -r 'uniq -c'
+	"$SUT" -m "localhost" -r 'uniq -c'
+    else
+        echo "Invalid mode $1 is specified"
+        exit 1
+    fi
+}
+
+####
+# verify word count works with compat mode (2 reducers)
+function bredtest_compat_wordcount_with_2reducers() {
+    if [ $1 == 'expected' ]; then
+	echo '      1 everyone
+      3 hello
+      1 one
+      2 world'
+    elif [ $1 == 'actual' ]; then
+	printf "hello\nworld\neveryone\nhello\nhello\none\nworld" | \
+	"$SUT" -m "localhost localhost" -r 'uniq -c'
     else
         echo "Invalid mode $1 is specified"
         exit 1
@@ -254,6 +273,7 @@ function bredtest_compat_wordcount() {
 }
 
 DIRNAME=$(dirname $(dirname $0))
+SUT=$DIRNAME/bred
 NUM_TOTAL=0
 NUM_PASSED=0
 
