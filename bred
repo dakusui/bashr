@@ -60,7 +60,7 @@ showhelp() {
 #   jobpath  "${tmp_dir:-/tmp}/br_job_${jobid}}"
 #   nodepath "${tmp_dir:-/tmp}/br_node_${jobid}}"
 # local
-bashr_parseopt() {
+bred_parseopt() {
     ${LC_ALL:=""}
     local brhostsfile="/etc/br.hosts"
     [ -e "$HOME/.br.hosts" ] && brhostsfile="$HOME/.br.hosts"
@@ -82,41 +82,42 @@ bashr_parseopt() {
     verbose="no"
      
     while getopts "m:p:j:M:I:c:r:i:o:e:t:S:s:T:O:v:h" name; do
-	case $name in
-	    m)  hosts=$OPTARG;;
-	    p)  baseport=$OPTARG;;
-	    j)  job_idx=$OPTARG;;
-	    M)  mode=$OPTARG;;
-            I)  interpreter=$OPTARG;;
-	    c)  mapcolumn=$OPTARG;;
-	    r)  userfunc=$OPTARG;;
-	    i)  input=$OPTARG;;
-	    o)  output=$OPTARG;;
-	    e)  error=$OPTARG;;
-	    t)  tmp_dir=$OPTARG;;
-	    S)  sort_mem=$OPTARG;;
-	    s)  sort_column=$OPTARG;;
-            O)  sort_on_out=$OPTARG;;
-            T)  sort_opt=$OPTARG;;
-            v)  verbose="yes";;
-	    h)  showhelp $0;;
-	    [?])  usage $0;;
-	esac
+    case "$name" in
+        m)  hosts=$OPTARG;;
+        p)  baseport=$OPTARG;;
+        j)  job_idx=$OPTARG;;
+        M)  mode=$OPTARG;;
+        I)  interpreter=$OPTARG;;
+        c)  mapcolumn=$OPTARG;;
+        r)  userfunc=$OPTARG;;
+        i)  input=$OPTARG;;
+        o)  output=$OPTARG;;
+        e)  error=$OPTARG;;
+        t)  tmp_dir=$OPTARG;;
+        S)  sort_mem=$OPTARG;;
+        s)  sort_column=$OPTARG;;
+        O)  sort_on_out=$OPTARG;;
+        T)  sort_opt=$OPTARG;;
+        v)  verbose="yes";;
+        h)  showhelp $0;;
+        [?])  usage $0;;
+    esac
     done 
     if [ -z "$hosts" ]; then
-	if [ -e "$brhostsfile" ]; then
-	    hosts=`cat "$brhostsfile"`
-	fi
+    if [ -e "$brhostsfile" ]; then
+        hosts=`cat "$brhostsfile"`
+    fi
     fi
     sort_column=${sort_column:-$mapcolumn}
     # check if 'hosts' is set.
     hosts=${hosts:?"`basename $0`: must specify hosts with -m or provide ~/.br.hosts or /etc/br.hosts"}
     case "$mode" in
-	compat|map|reduce)
+        compat|map|reduce)
             ;;
-	*)
+        *)
             echo "`basename $0`: unknown mode is specified. ($mode)"
             usage $0
+            ;;
     esac
     jobid=${jobid:-"`uuidgen`"}
 }
@@ -137,7 +138,7 @@ bashr_parseopt() {
 #   sorter
 #   usercode
 #   envvars
-bashr_compose_task() {
+bred_compose_task() {
     # mode: 'map', 'reduce', 'compat'
     local mode=$1
     local host_idx=$2
@@ -146,29 +147,29 @@ bashr_compose_task() {
     
     sorter="LC_ALL='$LC_ALL' sort -S$sort_mem -T$tmp_dir -k$sort_column,$sort_column $sort_opt  2>$sorter_errolog"
     local usercode=
-    local envvars=$(printf 'BRED_WORKER_IDX="%s"' $host_idx)
-    case $mode in 
-	map)
-            if [[ -z $userfunc ]]; then
- 		echo "`basename $0`: $mode is specified. must specify userfunc with -r"
-		usage $1
+    local envvars="BRED_WORKER_IDX=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\" BRED_USERCODE='$userfunc'"
+    case "$mode" in
+        map)
+            if [[ -z "$userfunc" ]]; then
+                echo "`basename $0`: $mode is specified. must specify userfunc with -r"
+                usage $1
             fi
-	    usercode='{
-                cmd=sprintf("%s %c%s%c", ENVIRON["INTERPRETER"], 39, ENVIRON["USERFUNC"], 39);
+            usercode='{
+                cmd=sprintf("%s %c%s%c", ENVIRON["BRED_INTERPRETER"], 39, ENVIRON["BRED_USERCODE"], 39);
                 print | cmd; 
             }'
             task="$envvars awk '$usercode' | $sorter"
             ;;
-	reduce)
-            if [[ -z $userfunc ]]; then
- 		echo "`basename $0`: $mode is specified. must specify userfunc with -r"
-		usage $1
+        reduce)
+            if [[ -z "$userfunc" ]]; then
+                echo "`basename $0`: ${mode} is specified. must specify userfunc with -r"
+                usage $1
             fi
-	    usercode='BEGIN {
-                cmd=sprintf("%s %c%s%c", ENVIRON["INTERPRETER"], 39, ENVIRON["USERFUNC"], 39);
+            usercode='BEGIN {
+                cmd=sprintf("%s %c%s%c", ENVIRON["BRED_INTERPRETER"], 39, ENVIRON["BRED_USERCODE"], 39);
                 firsttime=1;
                 key="";
-                keyindex=ENVIRON["MAPCOLUMN"];
+                keyindex=ENVIRON["BRED_KEYINDEX"];
             }
             {
                 if (key!=$keyindex) {
@@ -187,19 +188,13 @@ bashr_compose_task() {
             }'
             task="$envvars awk '$usercode' 2> $usercode_errlog | $sorter"
             ;;
-	compat)
-	    if [ -n "$userfunc" ]; then
-		# if we have a userfunc, add the pipe explicitly
-		if [ -n "$interpreter" ]; then
-		    usercode="| $envvars $interpreter '$userfunc' 2> $usercode_errlog"
-		else
-                    export BRED_WORKER_IDX="$host_idx"
-		    usercode="| $userfunc 2> $usercode_errlog"
-                    export BRED_WORKER_IDX=
-		fi
+        compat)
+            if [ -n "$userfunc" ]; then
+                # if we have a userfunc, add the pipe explicitly
+                usercode="| $envvars $interpreter '$userfunc' 2> $usercode_errlog"
             else
                 usercode=""
-	    fi
+            fi
             task="$sorter $usercode"
             ;;
         *)
@@ -209,7 +204,7 @@ bashr_compose_task() {
     esac
 }
 
-bashr_debug() {
+bred_debug() {
     echo "mode:"  ${mode//\n/ }
     echo "hosts:" ${hosts//\n/ }
 }
@@ -238,7 +233,7 @@ bashr_debug() {
 #   in_files
 #   input
 #   num_hosts
-bashr_executetask() {
+bred_executetask() {
     # okay let's get started!  first we need a name for our job
     local jobpath="$tmp_dir/br_job_$jobid"
     local nodepath="$tmp_dir/br_node_$jobid"
@@ -248,54 +243,54 @@ bashr_executetask() {
     local host_idx=0
     local out_files=
     local in_files=
-    
+
     # now, for each host, set up in and out fifos (and a netcat for each), and ssh to each host to set up workers listening on netcat
-    mkdir -p $jobpath/{in,out}
-    for host in $hosts; do
+    mkdir -p ${jobpath}/{in,out}
+    for host in ${hosts}; do
         ####
         # set up communication path
         # 1) master side
-	#    our named pipes
-	mkfifo $jobpath/{in,out}/$host_idx
+        #    our named pipes
+        mkfifo ${jobpath}/{in,out}/${host_idx}
         # 2) slave size
-	ssh -n $host "mkdir -p $nodepath"
+        ssh -n "$host" "mkdir -p ${nodepath}"
         #    let's start the remote 'nc' listener and get the pid of it
-	local pid=$(ssh -n $host "nc -l -p $port_out >$nodepath/in_$host_idx 2>/dev/null </dev/null & jobs -l" | awk {'print $2'})
+        local pid=$(ssh -n "$host" "nc -l -p $port_out >$nodepath/in_$host_idx 2>/dev/null </dev/null & jobs -l" | awk {'print $2'})
 
         ####
         # start task process on remote side and connect to it to the listener
         # 1) compose 'task' component based on execution mode (map, reduce, or compat)
-	bashr_compose_task "$mode" "$host_idx" "$nodepath"
+        bred_compose_task "$mode" "$host_idx" "$nodepath"
         # 2) start the task.
-	ssh $host -n \
-	    "tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
-                | $task \
-                | nc -q0 -l -p $port_in >&/dev/null &"
+        ssh "$host" -n \
+            "tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
+                    | $task \
+                    | nc -q0 -l -p $port_in >&/dev/null &"
 
         ####
         # Connect the task to the local forwarder of master side's
         # our local forwarders
-	nc $host $port_in >$jobpath/in/$host_idx &
-	nc -q0 $host $port_out <$jobpath/out/$host_idx &
+        nc "$host" "$port_in" >"$jobpath/in/$host_idx" &
+        nc -q0 "$host" "$port_out" <"$jobpath/out/$host_idx" &
         # our vars
-	out_files="$out_files $jobpath/out/$host_idx"
-	in_files="$in_files $jobpath/in/$host_idx"
-	port_in=$(($port_in + 2))
-	port_out=$(($port_in + 1))
-	host_idx=$(($host_idx + 1))
+        out_files="$out_files $jobpath/out/$host_idx"
+        in_files="$in_files $jobpath/in/$host_idx"
+        port_in=$(($port_in + 2))
+        port_out=$(($port_in + 1))
+        host_idx=$(($host_idx + 1))
     done
     
     ####    
     # okay, time to map
     if which brp >/dev/null; then
-	eval "${input:+pv $input |} brp - $(($mapcolumn - 1)) $out_files"
+        eval "${input:+pv $input |} brp - $(($mapcolumn - 1)) $out_files"
     else
-        ####    
-        # use awk if we don't have 'brp'
-	# we're taking advantage of a special property that awk leaves its file handles open until its done
-	# i think this is universal
-	# we're also sending a zero length string to all the handles at the end, in case some pipe got no love
-	eval "${input:+pv $input |} awk '{
+    ####
+    # use awk if we don't have 'brp'
+    # we're taking advantage of a special property that awk leaves its file handles open until its done
+    # i think this is universal
+    # we're also sending a zero length string to all the handles at the end, in case some pipe got no love
+    eval "${input:+pv $input |} awk '{
             srand(\$$mapcolumn);
             print \$0 >>\"$jobpath/out/\"int(rand() * $host_idx);
         }
@@ -311,31 +306,31 @@ bashr_executetask() {
     # (dakusui: abolished brm to simplify the software since i couldn't convince myself there is a big performance gain)
     # sort -m creates tmp files if too many input files are specified
     # brm doesn't do this
-    if [ $sort_on_out == "yes" ] ; then
-	eval "sort -k$sort_column,$sort_column -m $in_files $sort_opt ${output:+| pv >$output}"
+    if [ ${sort_on_out} == "yes" ] ; then
+        eval "sort -k${sort_column},${sort_column} -m ${in_files} ${sort_opt} ${output:+| pv >$output}"
     else
-	eval "cat $in_files ${output:+| pv >$output}"
+        eval "cat ${in_files} ${output:+| pv >$output}"
     fi
     
     ####
     # save errors somewhere
     local i=0;
-    for host in $hosts; do
-        local cmd='for i in $(ls '${nodepath}'/err_'$i'*); do echo 0 '$host' $i; nl -w 1 -s " " $i; echo; done'
-	if [ -n "$error" ]; then
-            ssh $host "$cmd" >>"$error"
+    for host in ${hosts}; do
+        local cmd='for i in $(ls '${nodepath}'/err_'${i}'*); do echo 0 '${host}' $i; nl -w 1 -s " " $i; echo; done'
+        if [ -n "$error" ]; then
+            ssh "$host" "$cmd" >>"$error"
         else
-            # By default, redirect stdouts of ssh commands to stderr
-            ssh $host "$cmd" 1>&2
+            # By default, redirect stdouts of ssh commands to stderr because the files are originally stderr.
+            ssh "$host" "$cmd" 1>&2
         fi
         i=$(($i + 1))
     done
 
     ####    
     # finally, clean up after ourselves
-    rm -rf $jobpath
-    for host in $hosts; do
-        ssh $host "rm -fr ${nodepath:?'node path isn't set''}" 
+    rm -rf "$jobpath"
+    for host in ${hosts}; do
+        ssh "$host" "rm -fr ${nodepath:?'node path isn't set''}"
     done
     
     ####    
@@ -343,10 +338,10 @@ bashr_executetask() {
     # this seems to work: /bin/kill -- -$$
 }
 
-bashr_parseopt "$@"
+bred_parseopt "$@"
 
-if [ $mode == "debug" ]; then
-    bashr_debug;
+if [ ${mode} == "debug" ]; then
+    bred_debug;
 else
-    bashr_executetask;
+    bred_executetask;
 fi
