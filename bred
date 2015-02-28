@@ -61,7 +61,7 @@ showhelp() {
 #   nodepath "${tmp_dir:-/tmp}/br_node_${jobid}}"
 # local
 bred_parseopt() {
-    ${LC_ALL:=""}
+    LC_ALL=${LC_ALL:-""}
     local brhostsfile="/etc/br.hosts"
     [ -e "$HOME/.br.hosts" ] && brhostsfile="$HOME/.br.hosts"
     base_port=8192
