@@ -1,7 +1,6 @@
-# bred : bashreduce enhanced.
+# ```bred``` : bashreduce enhanced.
 
-```bred``` is an enhanced version of ```bashreduce```, which is created by  erikfrey (by erik@fawx.com).
-And it is mapreduce in a bash script.
+```bred``` is an enhanced version of erikfrey's ```bashreduce```
 
 ## About ```bashreduce```
 ```bashreduce``` lets you apply your favorite unix tools in a mapreduce fashion across multiple machines/cores.  There's no installation, administration, or distributed filesystem.  You'll need:
@@ -31,7 +30,7 @@ And one more difference from ```bashreduce``` is
 
 # Configuration
 
-Edit @~/.br.hosts@ and/or @/etc/br.hosts@ and enter the machines you wish to use as workers.  Or specify your machines at runtime:
+Edit ```~/.br.hosts``` and/or ```/etc/br.hosts``` and enter the machines you wish to use as workers.  Or specify your machines at runtime:
 
 ```
 br -m "host1 host2 host3"
@@ -107,3 +106,28 @@ br -r "cat > /tmp/myfile" < input
 But this breaks if you specify the same host multiple times.  Maybe some kind of very basic virtualization is in order.  Maybe.
 
 Other niceties would be to more closely mimic the options presented in sort (numeric, reverse, etc).
+
+# Notes
+
+## About ```brp```'s behaviors
+## poor man's DFS
+Creating a directory
+```
+echo "" | ./bred -r 'mkdir -p /tmp/bredfs/${BRED_WORKER_IDX}/work' -T '-n' -c 1
+```
+
+Writing a file
+```
+nl -w 1 -b a ~/Documents/FSM.md | bred -r 'cat > /tmp/bredfs/${BRED_WORKER_IDX}/work/FSM.md' -T '-n' -c 1 >& /dev/null
+```
+Reading a file
+```
+echo "" | bred -r 'cat /tmp/bredfs/${BRED_WORKER_IDX}/work/FSM.md' -T '-n' -c 1 2> /dev/null | cut -f2-
+```
+
+Listing a directory
+```
+echo "" | ./bred -r 'ls /tmp/bredfs/${BRED_WORKER_IDX}/work |sort' -T '-n' -c 1 2> /dev/null | sort -m | uniq
+```
+
+* (t.b.d.)

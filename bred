@@ -114,8 +114,6 @@ bashr_parseopt() {
     case "$mode" in
 	compat|map|reduce)
             ;;
-	debug)
-            ;;
 	*)
             echo "`basename $0`: unknown mode is specified. ($mode)"
             usage $0
@@ -148,7 +146,7 @@ bashr_compose_task() {
     
     sorter="LC_ALL='$LC_ALL' sort -S$sort_mem -T$tmp_dir -k$sort_column,$sort_column $sort_opt  2>$sorter_errolog"
     local usercode=
-    local envvars="MAPCOLUMN=$mapcolumn INTERPRETER='$interpreter' USERFUNC='$userfunc' HOST_IDX='$host_idx'"
+    local envvars=$(printf 'BRED_WORKER_IDX="%s"' $host_idx)
     case $mode in 
 	map)
             if [[ -z $userfunc ]]; then
@@ -191,8 +189,14 @@ bashr_compose_task() {
             ;;
 	compat)
 	    if [ -n "$userfunc" ]; then
-	    # if we have a userfunc, add the pipe explicitly
-		usercode="| $userfunc 2> $usercode_errlog"
+		# if we have a userfunc, add the pipe explicitly
+		if [ -n "$interpreter" ]; then
+		    usercode="| $envvars $interpreter '$userfunc' 2> $usercode_errlog"
+		else
+                    export BRED_WORKER_IDX="$host_idx"
+		    usercode="| $userfunc 2> $usercode_errlog"
+                    export BRED_WORKER_IDX=
+		fi
             else
                 usercode=""
 	    fi
@@ -315,14 +319,16 @@ bashr_executetask() {
     
     ####
     # save errors somewhere
+    local i=0;
     for host in $hosts; do
-        local cmd='for i in $(ls '${nodepath}'/err*); do echo 0 '$host' $i; nl -w 1 -s " " $i; echo; done'
+        local cmd='for i in $(ls '${nodepath}'/err_'$i'*); do echo 0 '$host' $i; nl -w 1 -s " " $i; echo; done'
 	if [ -n "$error" ]; then
             ssh $host "$cmd" >>"$error"
         else
             # By default, redirect stdouts of ssh commands to stderr
             ssh $host "$cmd" 1>&2
         fi
+        i=$(($i + 1))
     done
 
     ####    
