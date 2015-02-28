@@ -25,14 +25,14 @@
 #
 #######################################################################################################################
 
-eval dirname="${1:-$(pwd)}" # Expand a tilde and a dot.
-find "$dirname" -type f -name ${2:-"*.txt"} |cat -n |tee docid.txt| pv |bred -c 3 -M map -j 0 -I 'awk' -r '{
-  for (l=1; (getline line<$2) > 0; l++) {
+eval dirname="${1:-$(pwd)}"
+find "$dirname" -type f -name ${2:-"*.txt"} |nl -w 1 -b a -s ' '|tee docid.txt |pv |bred -c 3 -M map -j 0 -I 'awk' -r '{
+  for (l=1; (getline line < "$2") > 0; l++) {
      gsub(/([[:punct:]]|[[:blank:]])+/, " ", line);
      n=split(line,cols," ");
-     for (i = 2; i < n; i++) print $1,l,cols[i];
+     for (i = 2; i < n; i++) { print $1, l, cols[i]; };
   }
-}' |pv |bred -c 3 -s 4 -O no -M reduce -j 1 -I 'awk' -r 'BEGIN { p=""; key="";} {
+}' |tee terms.txt |pv |bred -c 3 -s 4 -O no -M reduce -j 1 -I 'awk' -r 'BEGIN { p=""; key="";} {
     if (key == "") key=$3;
     p=p " " $1 "," $2
 } END { print "" key " " p; }' ${3:+"-o $3"}

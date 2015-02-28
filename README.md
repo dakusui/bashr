@@ -36,6 +36,7 @@ But one more difference from ```bashreduce``` is
 
 # Configuration
 
+## br.hosts file
 Edit ```~/.br.hosts``` and/or ```/etc/br.hosts``` and enter the machines you wish to use as workers.
 Or specify your machines at runtime:
 
@@ -44,8 +45,30 @@ bred -m "host1 host2 host3"
 ```
 To take advantage of multiple cores, repeat the host name.
 
+Below is my configuration, :)
+
+```
+
+localhost
+localhost
+localhost
+localhost
+localhost
+localhost
+localhost
+localhost
+```
+
+## ```brp```
+
+In order to improve performance, you can use a helper program ```brp```.
+To compile it, type ```make``` in ```brutils``` directory.
+And copy ```brp``` to a directory on your path. Probably the same directory as
+```bred```'s would be handy.
+
+This
+
 # Design
-## About ```brp```'s behaviors
 
 (t.b.d.)
 
@@ -195,3 +218,27 @@ We have a new bottleneck: we're limited by how quickly we can partition/pump our
 # Future work
 
 (t.b.d.)
+
+# Notes
+* About ```brp```'s behaviors
+brp and the small awk script which dispatches rows basically do the same thing.
+Both pick up a specified column, compute ```flvhash```, and dispatch the row to one of
+output files.
+But there are differences to be noticed.
+
+1. ```brp``` detects column separator using ```isspace(3)```, which returns ```true```
+   for " ". "\t", "\r", "\n", "\f", and "\v".
+2. If ```brp``` finds  a character which makes ```isspace``` true, it immediately
+   considers a field separator. Even if the row starts with those characters, or even
+   if multiple white space characters are next to each other.
+
+For example, the command line below is a bad practice.
+
+```
+    cat -n infile | br ...
+```
+
+
+
+
+```brp``` detects columns

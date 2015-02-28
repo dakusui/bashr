@@ -285,12 +285,12 @@ bred_executetask() {
     if which brp >/dev/null; then
         eval "${input:+pv $input |} brp - $(($mapcolumn - 1)) $out_files"
     else
-    ####
-    # use awk if we don't have 'brp'
-    # we're taking advantage of a special property that awk leaves its file handles open until its done
-    # i think this is universal
-    # we're also sending a zero length string to all the handles at the end, in case some pipe got no love
-    eval "${input:+pv $input |} awk '{
+        ####
+        # use awk if we don't have 'brp'
+        # we're taking advantage of a special property that awk leaves its file handles open until its done
+        # i think this is universal
+        # we're also sending a zero length string to all the handles at the end, in case some pipe got no love
+        eval "${input:+pv $input |} awk '{
             srand(\$$mapcolumn);
             print \$0 >>\"$jobpath/out/\"int(rand() * $host_idx);
         }
