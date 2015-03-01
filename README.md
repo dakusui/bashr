@@ -285,6 +285,3 @@ Please use something like below instead.
 * https://github.com/danfinkelstein/bashreduce
 * https://github.com/edwardbadboy
 * https://github.com/dakusui/bred
-
-# LICENSE
-  The goodwill of Erik Frey.
