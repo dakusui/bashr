@@ -14,11 +14,11 @@ Same as ```bashreduce```, you'll only need:
 * vanilla unix tools: sort, awk, ssh, netcat, pv
 * password-less ssh to each machine you plan to use
 
-Below are the enhancements made on top of ```bred```
+Below are the enhancements implemented in ```bred```
 
 * Created 'map' and 'reduce' behaviour modes, which allow you to perform
   tasks more normal mapreduce way. The behavior erikfrey created is now
-  called 'compat' and it is a default.
+  called 'compat' and it is still a default.
 * Made it possible to specify job_id (-j option) by an integer. Based on this
   number bred allocates ports to be used and now you can use bred multiple
   times in a command line connecting them pipes.
@@ -66,42 +66,40 @@ To compile it, type ```make``` in ```brutils``` directory.
 And copy ```brp``` to a directory on your path. Probably the same directory as
 ```bred```'s would be handy.
 
-This
-
-# Design
-
-(t.b.d.)
+Please refer to 'Notes' section to know potential problems usage of this utility can cause.
 
 # Examples
 ## Distributed indexing
 
 You can perform distributed indexing by one-liner with ```bred```.
+Suppose you have only several ```localhost```'s and you'll run
 
 ```bash
-  find __DIRNAME__ -type f -name '*.txt' |cat -n |tee docid.txt |pv |bred -c 3 -M map -j 0 -I 'awk' -r '{
-    for (l=1; (getline line<$2) > 0; l++) {
-       gsub(/([[:punct:]]|[[:blank:]])+/, " ", line);
-       n=split(line,cols," ");
-       for (i = 2; i < n; i++) print $1,l,cols[i];
-    }
-  }' |pv |bred -c 3 -s 4 -O no -M reduce -j 1 -I 'awk' -r 'BEGIN { p=""; key="";} {
-      if (key == "") key=$3;
-      p=p " " $1 "," $2
-  } END { print "" key " " p; }' -o index.txt
+find $(pwd) -type f -name '*.md' |nl -w 1 -s ' ' -b a|tee docid.txt |pv |bred -c 1 -s 3 -S1G -M map -j 0 -I 'awk' -r '{
+  for (l=1; (getline line < $2) > 0; l++) {
+     gsub(/([[:punct:]]|[[:blank:]])+/, " ", line);
+     n=split(line,cols," ");
+     for (i = 2; i < n; i++) { print $1, l, cols[i]; };
+  }
+}' |tee terms.txt |pv |bred -c 3 -s 1 -O no -M reduce -j 1 -S1G -I 'awk' -r 'BEGIN { p=""; key="";} {
+    if (key == "") key=$3;
+    p=p " " $1 "," $2
+} END { print "" key " " p; }' -o index.txt
 ```
 
-```__DIRNAME__``` is a full-path to the directory under which the files you want to index are. (CAUTION: This must be
-'absolute path'. No tilde as home, no dot as cwd. Use ```$HOME``` or ```$PWD``` instead)
+* NOTE) trying ```find . -type f -name ...``` will generate no output. Because awk doesn't read a file name like
+  from ```./hello.txt``` since it doesn't expand '.' or '~' to their full-path representations.
 
+This indexes all the '*.md' files under current directly.
 A document id file and an inverted index will be generated as ```docid.txt``` and ```index.txt``` and they will look like below
 
 * docid.txt
 ```
 
-     6  /home/hiroshi/workspace/symfonion/src/test/java/com/github/dakusui/symfonion/InvalidJsonErrorTest.java
-     7  /home/hiroshi/workspace/symfonion/src/test/java/com/github/dakusui/symfonion/core/FractionTest.java
-     8  /home/hiroshi/workspace/symfonion/src/test/java/com/github/dakusui/symfonion/InvalidDataErrorTest.java
-     9  /home/hiroshi/workspace/symfonion/src/test/java/com/github/dakusui/symfonion/ErrorTest.java
+     6  /home/dakusui/workspace/symfonion/src/test/java/com/github/dakusui/symfonion/InvalidJsonErrorTest.java
+     7  /home/dakusui/workspace/symfonion/src/test/java/com/github/dakusui/symfonion/core/FractionTest.java
+     8  /home/dakusui/workspace/symfonion/src/test/java/com/github/dakusui/symfonion/InvalidDataErrorTest.java
+     9  /home/dakusui/workspace/symfonion/src/test/java/com/github/dakusui/symfonion/ErrorTest.java
 ```
 
 The first column of ```docid.txt``` is ID of each document and the second is the file's absolute location.
@@ -217,10 +215,11 @@ We have a new bottleneck: we're limited by how quickly we can partition/pump our
 
 # Future work
 
-(t.b.d.)
+* [Implement better data exchange mechanism #3](https://github.com/dakusui/bred/issues/3)
+* [Execute awk function in a reduce task #6](https://github.com/dakusui/bred/issues/6)
 
 # Notes
-* About ```brp```'s behaviors
+## About ```brp```'s behaviors
 brp and the small awk script which dispatches rows basically do the same thing.
 Both pick up a specified column, compute ```flvhash```, and dispatch the row to one of
 output files.
@@ -232,13 +231,26 @@ But there are differences to be noticed.
    considers a field separator. Even if the row starts with those characters, or even
    if multiple white space characters are next to each other.
 
-For example, the command line below is a bad practice.
+For example, perhaps the command line below is a bad practice.
 
 ```
     cat -n infile | br ...
 ```
 
+Because ```cat -n``` produces results below,
 
+```
+___221	# Notes
+___222	* About ```brp```'s behaviors
+___223	brp and the small awk script which dispatches rows basically do the same thing.
+___224	Both pick up a specified column, compute ```flvhash```, and dispatch the row to one of
+```
+(leading spaces are replaced with underlines)
 
+Due to the ```brp```'s behavior described above, almost all the rows will be processed by the same worker since ```brp```
+picks up a string of length 0 as the first field and compute a hash for it always.
+Please use something like below instead.
 
-```brp``` detects columns
+```
+    nl -w 1 -s ' ' -b a
+```
