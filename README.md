@@ -21,7 +21,7 @@ Below are the enhancements implemented in ```bred```
   called 'compat' and it is still a default.
 * Made it possible to specify job_id (-j option) by an integer. Based on this
   number bred allocates ports to be used and now you can use bred multiple
-  times in a command line connecting them pipes.
+  times in a command line connecting them with pipes.
 * Made it possible to specify base port.
 * Added 'sort_opt' option to be able to make sort commands use it. This is
   useful e.g., when you want to sort the output by a numeric field. Use "-s '-n'"
@@ -30,7 +30,7 @@ Below are the enhancements implemented in ```bred```
   running ```bred``` or ```bashreduce```
 * Reorganized internal structure.
 
-But one more difference from ```bashreduce``` is
+And one more difference from ```bashreduce``` is
 
 * ```bred``` doesn't have ```brm```: I gave up making it consistent with 'sort -m'.
 
@@ -266,7 +266,7 @@ ___224	Both pick up a specified column, compute ```flvhash```, and dispatch the 
 ```
 (leading spaces are replaced with underlines)
 
-Due to the ```brp```'s behavior described above, almost all the rows will be processed by the same worker since ```brp```
+Due to the ```brp```'s behavior described above, all the rows will be processed by the same worker since ```brp```
 picks up a string of length 0 as the first field and compute a hash for it always.
 Please use something like below instead.
 
@@ -274,13 +274,13 @@ Please use something like below instead.
     nl -w 1 -s ' ' -b a
 ```
 
-# AUTHORS
+# Authors
 * Erik Frey <erik@fawx.com>
 * Daniel Alex Finkelstein
 * Zhou Zheng Sheng <edwardbadboy@qq.com>
 * Hiroshi Ukai <dakusui@gmail.com>
 
-# SEE ALSO
+# See also
 * https://github.com/erikfrey/bashreduce
 * https://github.com/danfinkelstein/bashreduce
 * https://github.com/edwardbadboy
