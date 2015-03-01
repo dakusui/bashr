@@ -123,6 +123,25 @@ is the line number where the term was found in the file.
 
 If you prefer a script file, you can find it [here](examples/indexer.sh).
 
+### Making it faster
+
+The user code script you provide is executed by ```bred``` every time it finds a new key during reduce operation.
+And the user code is executed as external command using the interpreter you specify by '-I' option.
+If there are a lot of keys to be passed to the reduce function, command execution overhead damages the performance severely.
+
+```bred``` provides another behavior mode called ```awk-native```. You can set this string to '-I' option and awk code string
+which defines three functions: ```bredBeginReduce(key_idx)```, ```bredReduceReduce(key_idx)```, and ``````bredEndReduce()```.
+When ```bred``` finds a new key, it first calls ```bredEndReduce``` for the previous key and the it calls ```bredBeginReduce```
+for the new key. And for each line ```bredBeginReduce``` will be called.
+
+A short experiment shows that there would be 3 times performance gain when I indexed all texts Project Gutenberg as of 2003 (400MB).
+
+The example is found [here](examples/indexer2.sh).
+
+Signatures of those 'hook' functions called by ```bred``` are floating right now. You might need to calibrate them to
+make it work in future when you start using one of future versions of ```bred```.
+
+
 ## poor man's DFS
 You can use ```bred``` as 'poor man's DFS'. Since I have implemented a small enhancement, you can specify a certain host
 multiple times in br.hosts file.

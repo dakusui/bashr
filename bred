@@ -134,7 +134,7 @@ bred_parseopt() {
 #   tmp_dir (from opt)
 # * out
 #   task
-# * tmp (local)
+# * local
 #   sorter
 #   usercode
 #   envvars
@@ -158,35 +158,81 @@ bred_compose_task() {
                 cmd=sprintf("%s %c%s%c", ENVIRON["BRED_INTERPRETER"], 39, ENVIRON["BRED_USERCODE"], 39);
                 print | cmd; 
             }'
-            task="$envvars awk '$usercode' | $sorter"
+            task="$envvars $AWK '$usercode' | $sorter"
             ;;
         reduce)
             if [[ -z "$userfunc" ]]; then
                 echo "`basename $0`: ${mode} is specified. must specify userfunc with -r"
                 usage $1
             fi
-            usercode='BEGIN {
-                cmd=sprintf("%s %c%s%c", ENVIRON["BRED_INTERPRETER"], 39, ENVIRON["BRED_USERCODE"], 39);
-                firsttime=1;
-                key="";
-                keyindex=ENVIRON["BRED_KEYINDEX"];
-            }
-            {
-                if (key!=$keyindex) {
-                  if (firstTime!=1) {
-                      close(cmd); 
-                  }
-                }
-                print | cmd;
-                fisttime=0;
-                key=$keyindex;
-            }
-            END {
-                if (firsttime==0) {
-                    close(cmd);
-                }
-            }'
-            task="$envvars awk '$usercode' 2> $usercode_errlog | $sorter"
+            case ${interpreter} in
+                "awk-native")
+                    usercode='BEGIN {
+                        bred_firsttime=1;
+                        bred_key=FS;
+                        bred_keyindex=ENVIRON["BRED_KEYINDEX"];
+                    }
+                    {
+                        if (bred_key!=$bred_keyindex) {
+                          if (bred_firsttime!=1) {
+                              bredEndReduce();
+                          }
+                          bredBeginReduce(bred_keyindex);
+                        }
+                        bredReduce(bred_keyindex);
+                        bred_firsttime=0;
+                        bred_key=$bred_keyindex;
+                    }
+                    END {
+                        if (bred_firsttime==0) {
+                            bredEndReduce();
+                        }
+                    }
+                    __USERCODE__'
+                    #
+                    #  __USERCODE__ is replaced with a string provided by user using '-r' option.
+                    #  Below is an example to perform 'word count' example.
+                    #
+                    #  function bredBeginReduce(key_idx) {
+                    #    i=0;
+                    #    key=$key_idx;
+                    #    print "BEGIN", key, "(", key_idx, ")"
+                    #  }
+                    #  function bredReduce(key_idx) {
+                    #     print "REDUCE", $key_idx
+                    #     i++;
+                    #  }
+                    #  function bredEndReduce() {
+                    #    print "END", key, i;
+                    #  }
+                    usercode=${usercode//__USERCODE__/${userfunc}}
+                    task="$envvars $AWK '$usercode' 2> $usercode_errlog | $sorter"
+                    ;;
+                *)
+                    usercode='BEGIN {
+                        cmd=sprintf("%s %c%s%c", ENVIRON["BRED_INTERPRETER"], 39, ENVIRON["BRED_USERCODE"], 39);
+                        firsttime=1;
+                        key="";
+                        keyindex=ENVIRON["BRED_KEYINDEX"];
+                    }
+                    {
+                        if (key!=$keyindex) {
+                          if (firsttime!=1) {
+                              close(cmd);
+                          }
+                        }
+                        print | cmd;
+                        firsttime=0;
+                        key=$keyindex;
+                    }
+                    END {
+                        if (firsttime==0) {
+                            close(cmd);
+                        }
+                    }'
+                    task="$envvars $AWK '$usercode' 2> $usercode_errlog | $sorter"
+                    ;;
+            esac
             ;;
         compat)
             if [ -n "$userfunc" ]; then
@@ -202,11 +248,6 @@ bred_compose_task() {
             exit 1
             ;;
     esac
-}
-
-bred_debug() {
-    echo "mode:"  ${mode//\n/ }
-    echo "hosts:" ${hosts//\n/ }
 }
 
 # Executes a map/reduce/compat task
@@ -234,6 +275,7 @@ bred_debug() {
 #   input
 #   num_hosts
 bred_executetask() {
+    AWK="/usr/bin/awk"
     # okay let's get started!  first we need a name for our job
     local jobpath="$tmp_dir/br_job_$jobid"
     local nodepath="$tmp_dir/br_node_$jobid"
@@ -339,9 +381,4 @@ bred_executetask() {
 }
 
 bred_parseopt "$@"
-
-if [ ${mode} == "debug" ]; then
-    bred_debug;
-else
-    bred_executetask;
-fi
+bred_executetask;
