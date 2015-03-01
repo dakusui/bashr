@@ -254,3 +254,18 @@ Please use something like below instead.
 ```
     nl -w 1 -s ' ' -b a
 ```
+
+# AUTHORS
+* Erik Frey <erik@fawx.com>
+* Daniel Alex Finkelstein
+* Zhou Zheng Sheng <edwardbadboy@qq.com>
+* Hiroshi Ukai <dakusui@gmail.com>
+
+# SEE ALSO
+* https://github.com/erikfrey/bashreduce
+* https://github.com/danfinkelstein/bashreduce
+* https://github.com/edwardbadboy
+* https://github.com/dakusui/bred
+
+# LICENSE
+  The goodwill of Erik Frey.
