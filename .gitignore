@@ -1,10 +1,10 @@
-*.txt
 bred.iml
 test
 tmp*
 *~
 br
 .idea
+*.dat
 *.out
 *.o
 brp
