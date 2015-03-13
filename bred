@@ -191,7 +191,7 @@ bred_compose_task() {
                     __USERCODE__'
                     #
                     #  __USERCODE__ is replaced with a string provided by user using '-r' option.
-                    #  Below is an example to perform 'word count' example.
+                    #  Below is an example to perform 'word count'.
                     #
                     #  function bredBeginReduce(key_idx) {
                     #    i=0;
