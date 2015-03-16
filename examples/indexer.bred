@@ -1,0 +1,5 @@
+#Id Sinks        Type Key Interpreter Task
+-   1            M    1   sh;-c       inline:"xargs -I _dirname_ find _dirname_ -type f -name '*.txt'"
+1   >docid.dat;2 M    1   sh;-c       inline:"nl -w 1 -s ' ' -b a"     
+2   >terms.dat;3 M    1   awk         file:"tokenize.awk"
+3   -            R    3   awk-native  file:"genindex.awk"
