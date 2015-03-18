@@ -1,6 +1,6 @@
 #!/bin/bash -eu
 
-readstdin() {
+read_stdin() {
     while IFS="" read -r _line
     do
         echo "${_line}"
@@ -8,11 +8,13 @@ readstdin() {
 }
 
 read_task() {
+    local _bredfile_dir="$2"
     local _ret=""
     case $1 in
-	file:*)   _ret=$(cat ${$1:5});;
-	inline:*) _ret=${1:7};;
-	*)        echo "${prog}: line ${LINENO}: Unknown scheme ${1} is specified." >&2 ; exit 1 ;;
+	file:/*)  _ret="'""$(cat ${1:5})""'";;
+	file:*)   _ret="'""$(cat ${_bredfile_dir}/${1:5})""'";;
+	inline:*) _ret="${1:7}";;
+	*)        echo "${prog}: line ${LINENO}: Unknown scheme is specified. (${1})" >&2 ; exit 1 ;;
     esac
     echo "$_ret"
 }
@@ -27,7 +29,7 @@ read_bred_records() {
 	if [[ "$_id" == "#"* || -z "$_id" ]]; then
 	    continue
 	fi
-	_task=$(read_task "${_task}")
+	_task=$(read_task "${_task}" "${2}")
 	printf "id=${_id},type=${_type},sinks=${_sinks},key=${_key},interpreter=${_interpreter},task=${_task}\n"
 	if [ ${tasktype[${_id}]+_} ]; then
 	    echo "${prog}: line ${LINENO}: The key ${_id} is defined more than once" >&2
@@ -81,7 +83,8 @@ exectask() {
 	echo "${prog}: line ${LINENO}: Unknown task type ${_tasktype} was specified."  >&2
 	exit 1
     fi
-    eval ${cmd}
+    # echo "${cmd}" >&2
+    eval "${cmd}"
 }
 
 # $1 source side task name
@@ -129,7 +132,7 @@ execstage() {
 	exit 1
     elif [[ "$_numsinks" == 1 ]]; then
 	if [ "${sinks[${1}]}" == "-" ]; then
-	    exectask "${1}"
+	    exectask "${1}"  >> ${bredout}
 	else
 	    exectask "${1}" | execstage "${sinks[${1}]}" "${_keyconverter_taskid}"
 	fi
@@ -139,11 +142,7 @@ execstage() {
 	for _s in "${_sinks[@]}"; do
 	    local _keyconverter=$(compose_keyconverter "${1}" "${_s}" "${_keyconverter_taskid}")
 	    _keyconverter_taskid=$((${_keyconverter_taskid} + 1))
-	    if [ "${_i}" == "${_numsinks}" ]; then
-		_tee="${_tee} | (${_keyconverter} execstage ${_s} ${_keyconverter_taskid})"
-	    else
-		_tee="${_tee} >(${_keyconverter} execstage ${_s} ${_keyconverter_taskid})"
-	    fi
+	    _tee="${_tee} >(${_keyconverter} execstage ${_s} ${_keyconverter_taskid} >> ${bredout}) >/dev/null"
 	    _i=$((${_i} + 1))
 	done
 	exectask "${1}" | eval "${_tee}"
@@ -154,6 +153,7 @@ execstage() {
 main() {
     # global variables
     prog="`basename $0`"
+    bredout="/tmp/bred++-`uuidgen`"
     declare -A tasktype
     declare -A sinks
     declare -A key
@@ -162,12 +162,14 @@ main() {
     declare -A tasknum
 
     # read records from job definition file
-    read_bred_records "$1"
+    read_bred_records "$1" $(dirname "$1")
 
     # start pipleline
     echo "starting pipeline"
-    readstdin | execstage "${firsttask}" 100
-    #readstdin | exectask Tok
+    mkfifo "${bredout}"
+    read_stdin | execstage "${firsttask}" 100
+    cat "${bredout}"
+    rm "${bredout}"
     echo "done"
 }
 

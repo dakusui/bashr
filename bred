@@ -136,8 +136,12 @@ bred_compose_task() {
     local host_idx=$2
     local usercode_errlog="${3}/err_${host_idx}-usercode.err"
     local sorter_errolog="${3}/err_${host_idx}-sorter.err"
-    
-    sorter="LC_ALL='$LC_ALL' sort -S$sort_mem -T$tmp_dir -k$sort_column,$sort_column $sort_opt  2>$sorter_errolog"
+
+    sorter=""
+    if [ "$sort_on_out" == "yes" ] ; then
+	sorter="| LC_ALL='$LC_ALL' sort -S$sort_mem -T$tmp_dir -k$sort_column,$sort_column $sort_opt  2>$sorter_errolog"
+    fi
+
     local usercode=
     local envvars="BRED_WORKER_IDX=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\" BRED_USERCODE='$userfunc'"
     case "$mode" in
@@ -150,7 +154,7 @@ bred_compose_task() {
                 cmd=sprintf("%s %c%s%c", ENVIRON["BRED_INTERPRETER"], 39, ENVIRON["BRED_USERCODE"], 39);
                 print | cmd; 
             }'
-            task="$envvars $AWK '$usercode' | $sorter"
+            task="| $envvars $AWK '$usercode' $sorter"
             ;;
         reduce)
             if [[ -z "$userfunc" ]]; then
@@ -198,7 +202,7 @@ bred_compose_task() {
                     #    print "END", key, i;
                     #  }
                     usercode=${usercode//__USERCODE__/${userfunc}}
-                    task="$envvars $AWK '$usercode' 2> $usercode_errlog | $sorter"
+                    task="| $envvars $AWK '$usercode' 2> $usercode_errlog $sorter"
                     ;;
                 *)
                     usercode='BEGIN {
@@ -222,7 +226,7 @@ bred_compose_task() {
                             close(cmd);
                         }
                     }'
-                    task="$envvars $AWK '$usercode' 2> $usercode_errlog | $sorter"
+                    task="| $envvars $AWK '$usercode' 2> $usercode_errlog $sorter"
                     ;;
             esac
             ;;
@@ -284,7 +288,7 @@ bred_executetask() {
         # 2) start the task.
         ssh "$host" -n \
             "tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
-                    | $task \
+                    $task \
                     | nc -q0 -l -p $port_in >&/dev/null &"
 
         ####
@@ -336,7 +340,7 @@ bred_executetask() {
     # save errors somewhere
     local i=0;
     for host in ${hosts}; do
-        local cmd='for i in $(ls '${nodepath}'/err_'${i}'*); do echo 0 '${host}' $i; nl -w 1 -s " " $i; echo; done'
+        local cmd='for i in $(ls '${nodepath}'/err_'${i}'*); do echo '${i}' $(basename $i); nl -w 1 -s " " $i; echo '${i}' ----; done'
         if [ -n "$error" ]; then
             ssh "$host" "$cmd" >>"$error"
         else

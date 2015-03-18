@@ -44,7 +44,7 @@ function bredcheckenv_nc_supports_listen_mode() {
     fi
 }
 
-function bredcheckenv_pv_is_nstalled() {
+function bredcheckenv_pv_is_installed() {
     if [ $1 == 'expected' ]; then
         echo '1'
     elif [ $1 == 'actual' ]; then
@@ -113,6 +113,22 @@ function bredtest_1reducer() {
 }
 
 ####
+# verify reducer is working (sort_on_out disabled : -O no)
+function bredtest_1reducer_sort_on_out_no() {
+    if [ $1 == 'expected' ]; then
+        echo '0 BEGIN
+0 BEGIN
+0 BEGIN'
+    elif [ $1 == 'actual' ]; then
+        printf "03 A\n02 A\n01 B\n01 C\n" | \
+        "$SUT" -m "localhost" -j 0 -M reduce -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' -O no 2>/dev/null | grep 'BEGIN'
+    else
+        echo "Invalid mode $1 is specified"
+        exit 1
+    fi
+}
+
+####
 # verify 2 reducers are working
 function bredtest_2reducers() {
     if [ $1 == 'expected' ]; then
@@ -159,6 +175,24 @@ function bredtest_1mapper() {
     elif [ $1 == 'actual' ]; then
         printf "03 A\n02 A\n01 B\n01 C\n" | \
         "$SUT" -m "localhost" -j 0 -M map -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null
+    else
+        echo "Invalid mode $1 is specified"
+        exit 1
+    fi
+}
+
+# sort_on_out disabled (-O no)
+function bredtest_1mapper_sort_on_out_no() {
+    if [ $1 == 'expected' ]; then
+        echo '0 BEGIN
+1 MAIN 03 A
+2 MAIN 02 A
+3 MAIN 01 B
+4 MAIN 01 C
+5 END'
+    elif [ $1 == 'actual' ]; then
+        printf "03 A\n02 A\n01 B\n01 C\n" | \
+        "$SUT" -m "localhost" -j 0 -M map -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' -O no 2>/dev/null
     else
         echo "Invalid mode $1 is specified"
         exit 1
@@ -249,6 +283,20 @@ function bredtest_compat_wordcount() {
     elif [ $1 == 'actual' ]; then
         printf "hello\nworld\neveryone\nhello\nhello\none\nworld" | \
         "$SUT" -m "localhost" -r 'uniq -c' 2>/dev/null
+    else
+        echo "Invalid mode $1 is specified"
+        exit 1
+    fi
+}
+
+####
+# verify word count works with compat mode (sort_on_out disabled)
+function bredtest_compat_wordcount_sort_on_out_disabled() {
+    if [ $1 == 'expected' ]; then
+        echo '      1 everyone'
+    elif [ $1 == 'actual' ]; then
+        printf "hello\nworld\neveryone\nhello\nhello\none\nworld" | \
+        "$SUT" -m "localhost" -r 'uniq -c' -O no 2> /dev/null | grep 'everyone' 
     else
         echo "Invalid mode $1 is specified"
         exit 1
