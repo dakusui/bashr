@@ -143,7 +143,7 @@ make it work in future when you start using one of future versions of ```bred```
 
 
 ## poor man's DFS
-You can use ```bred``` as 'poor man's DFS'. Since I have implemented a small enhancement, you can specify a certain host
+You can use ```bred``` as 'poor man's DFS'. Since I have implemented a small enhancement, now you can specify a certain host
 multiple times in br.hosts file.
 
 ### Creating a directory

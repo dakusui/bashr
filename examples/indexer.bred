@@ -1,0 +1,6 @@
+#Id   Type Sinks          Key Interpreter Task
+Tok   M    Ind1;Ind2;Ind3 -   sh;-c       inline:"cat -n"
+Ind1  R    -              2   awk         inline:'{ print "Ind1",$0; }'
+Ind2  R    -              3   awk         inline:'{ print "Ind2",$0; }'
+Ind3  R    -              3   awk         inline:'{ print "Ind3",$0; }'
+
