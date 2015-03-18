@@ -116,12 +116,13 @@ function bredtest_1reducer() {
 # verify reducer is working (sort_on_out disabled : -O no)
 function bredtest_1reducer_sort_on_out_no() {
     if [ $1 == 'expected' ]; then
-        echo '0 BEGIN
-0 BEGIN
-0 BEGIN'
+        echo '1 MAIN 01 B
+1 MAIN 02 A
+1 MAIN 03 A
+2 MAIN 01 C'
     elif [ $1 == 'actual' ]; then
         printf "03 A\n02 A\n01 B\n01 C\n" | \
-        "$SUT" -m "localhost" -j 0 -M reduce -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' -O no 2>/dev/null | grep 'BEGIN'
+        "$SUT" -m "localhost" -j 0 -M reduce -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' -O no 2>/dev/null | grep 'MAIN' | sort
     else
         echo "Invalid mode $1 is specified"
         exit 1

@@ -30,7 +30,7 @@ usage() {
 
 showhelp() {
     echo "Usage: `basename $1`: [-m host1 [host2...]] [-c column] [-r userfunc] [-i input] [-o output] [-e error]"
-    echo   "bashreduce.  Map an input file to many hosts, sort/reduce, merge"
+    echo   "bred. bashreduce enhanced.  Map an input file to many hosts, sort/reduce, merge"
     echo   "  -m: hosts to use, can repeat hosts for multiple cores"
     echo   "      default hosts from ~/.br.hosts or /etc/br.hosts"
     echo   "  -p: base port, default = 8192"
