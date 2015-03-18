@@ -1,0 +1,174 @@
+#!/bin/bash -eu
+
+readstdin() {
+    while IFS="" read -r _line
+    do
+        echo "${_line}"
+    done
+}
+
+read_task() {
+    local _ret=""
+    case $1 in
+	file:*)   _ret=$(cat ${$1:5});;
+	inline:*) _ret=${1:7};;
+	*)        echo "${prog}: line ${LINENO}: Unknown scheme ${1} is specified." >&2 ; exit 1 ;;
+    esac
+    echo "$_ret"
+}
+
+read_bred_records() {
+    local _tasknum=0
+    local _id _type _sinks _key _interpreter _task
+    firsttask=""
+    while read -r _id _type _sinks _key _interpreter _task
+    do 
+	# Ignore records which start with '#'
+	if [[ "$_id" == "#"* || -z "$_id" ]]; then
+	    continue
+	fi
+	_task=$(read_task "${_task}")
+	printf "id=${_id},type=${_type},sinks=${_sinks},key=${_key},interpreter=${_interpreter},task=${_task}\n"
+	if [ ${tasktype[${_id}]+_} ]; then
+	    echo "${prog}: line ${LINENO}: The key ${_id} is defined more than once" >&2
+	    exit 1
+	fi
+	if [ ${_tasknum} == 0 ]; then
+	    firsttask=${_id}
+	fi
+	tasktype[${_id}]=${_type}
+	sinks[${_id}]=${_sinks//\;/ }
+        key[${_id}]=${_key}
+	interpreter[${_id}]=${_interpreter//\;/ }
+	task[${_id}]=${_task}
+	tasknum[${_id}]=${_tasknum}
+	_tasknum=$((${_tasknum} + 1))
+    done <"$1"
+    if [ -z "${firsttask}" ]; then
+	echo "${prog}: line ${LINENO}: No task was found."  >&2
+	exit 1
+    fi
+}
+
+nextkey() {
+    if [ "${sinks[$1]}" == "-" ]; then
+	echo 1
+    else
+	local _sinks
+	local _k
+	IFS=" " read -ra _sinks <<< "${sinks[${1}]}"
+	_k="${_sinks[0]}"
+	currentkey ${_k}
+    fi
+}
+
+currentkey() {
+    local _key="${key[${1}]}"
+    if [ "${_key}" == "-" ]; then
+	_key=1
+    fi
+    echo "${_key}"
+}
+
+exectask() {
+    local _tasktype=${tasktype["${1}"]}
+    local cmd=""
+    if [[ "${_tasktype}" == "M" ]]; then
+	cmd="bred -c \"$(currentkey ${1})\" -s \"$(nextkey ${1})\" -M map -j \"${tasknum[${1}]}\" -I \"${interpreter[${1}]}\" -r ${task[${1}]}"
+    elif [[ "${_tasktype}" == "R" ]]; then
+	cmd="bred -c \"$(currentkey ${1})\" -s \"$(nextkey ${1})\" -M reduce -j \"${tasknum[${1}]}\" -I \"${interpreter[${1}]}\" -r ${task[${1}]}"
+    else
+	echo "${prog}: line ${LINENO}: Unknown task type ${_tasktype} was specified."  >&2
+	exit 1
+    fi
+    eval ${cmd}
+}
+
+# $1 source side task name
+# $2 sink side task name
+# $3 task id for keyconverter 
+compose_keyconverter() {
+    if [ "$(nextkey ${1})" == ${key["$2"]} ]; then
+	echo ""
+	return 0
+    else
+	local _k1="${key[$1]}"
+	if [[ "${_k1}" == "-" ]]; then
+	    _k1=1
+	fi
+	local _k2="${key[$2]}"
+	if [[ "${_k2}" == "-" ]]; then
+	    _k2=1
+	fi
+	echo "bred -j ${3} -c ${_k1} -s ${_k2} -M map -I \"sh -c\" -r 'cat'|"
+	return 1
+    fi
+}
+
+execstage() {
+    local _i
+    local _numsinks=0
+    local _s
+    local _sinks
+    local _keyconverter_taskid=$2
+    # count number of sinks for this task
+    IFS=" " read -ra _sinks <<< "${sinks[${1}]}"
+    for _s in "${_sinks[@]}"; do
+	if [ "${_s}" == "-" ]; then
+	    _numsinks=$((_numsinks + 1))
+	    continue
+	fi
+	if [ -z ${tasktype["${_s}"]+_} ]; then
+	    echo "${prog}: line ${LINENO}: No task ${_s} was found (referenced by task ${1})."  >&2
+	    exit 1
+	fi
+	_numsinks=$((_numsinks + 1))
+    done
+    if [[ "$_numsinks" -le 0 ]]; then
+	echo "${prog}: line ${LINENO}: No sink was defined for task ${1}."  >&2
+	exit 1
+    elif [[ "$_numsinks" == 1 ]]; then
+	if [ "${sinks[${1}]}" == "-" ]; then
+	    exectask "${1}"
+	else
+	    exectask "${1}" | execstage "${sinks[${1}]}" "${_keyconverter_taskid}"
+	fi
+    else
+	local _tee="tee"
+	_i=1
+	for _s in "${_sinks[@]}"; do
+	    local _keyconverter=$(compose_keyconverter "${1}" "${_s}" "${_keyconverter_taskid}")
+	    _keyconverter_taskid=$((${_keyconverter_taskid} + 1))
+	    if [ "${_i}" == "${_numsinks}" ]; then
+		_tee="${_tee} | (${_keyconverter} execstage ${_s} ${_keyconverter_taskid})"
+	    else
+		_tee="${_tee} >(${_keyconverter} execstage ${_s} ${_keyconverter_taskid})"
+	    fi
+	    _i=$((${_i} + 1))
+	done
+	exectask "${1}" | eval "${_tee}"
+    fi
+}
+
+
+main() {
+    # global variables
+    prog="`basename $0`"
+    declare -A tasktype
+    declare -A sinks
+    declare -A key
+    declare -A interpreter
+    declare -A task
+    declare -A tasknum
+
+    # read records from job definition file
+    read_bred_records "$1"
+
+    # start pipleline
+    echo "starting pipeline"
+    readstdin | execstage "${firsttask}" 100
+    #readstdin | exectask Tok
+    echo "done"
+}
+
+main $@

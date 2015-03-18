@@ -157,6 +157,7 @@ Important point is, if a file name is given as ```$2```,
 this code, which can be executed on any hosts in br.hosts, can always open the same file.
 
 ## poor man's DFS
+multiple times in br.hosts file.
 You can use ```bred``` as 'poor man's DFS'. Since I have added a small enhancement to the original ```br```, now you can specify
 a certain host multiple times in br.hosts file.
 But still only text files can be stored.

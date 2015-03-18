@@ -123,21 +123,13 @@ bred_parseopt() {
 }
 
 # * in
-#   mode (param[1])
-#   host_idx (param[2])
-#   nodepath (param[3])
-#   LC_ALL (from env)
-#   mapcolumn (from opt)
-#   interpreter (from opt)
-#   userfunc (from opt)
-#   sort_mem (from opt)
-#   tmp_dir (from opt)
+#   (params)     mode, host_idx, nodepath
+#   (enviromnet) LC_ALL
+#   (from opt)   mapcolumn, interpreter, userfunc, sort_mem, tmp_dir
 # * out
 #   task
 # * local
-#   sorter
-#   usercode
-#   envvars
+#   sorter, usercode, envvars
 bred_compose_task() {
     # mode: 'map', 'reduce', 'compat'
     local mode=$1
@@ -254,26 +246,12 @@ bred_compose_task() {
 # 
 # variables:
 # * read
-#   hosts (from opt)
-#   mode (from opt)
-#   mapcolumn (from opt)
-#   userfunc (from opt)
-#   sort_column (from opt)
-#   sorter
-#   tmp_dir
+#   (from opt) hosts, mode, mapcolumn, userfunc, solrt_column
+#   (globals)  sorter, tmp_dir
 # * write
 #   (none)
 # * local
-#   host
-#   pid
-#   envvars
-#   port_in
-#   port_out
-#   host_idx
-#   out_files
-#   in_files
-#   input
-#   num_hosts
+#   host, pid, envvars, port_in, port_out, host_idx, out_files, in_filed, input, num_hosts
 bred_executetask() {
     AWK="/usr/bin/awk"
     # okay let's get started!  first we need a name for our job
@@ -325,7 +303,7 @@ bred_executetask() {
     ####    
     # okay, time to map
     if which brp >/dev/null; then
-        eval "${input:+pv $input |} brp - $(($mapcolumn - 1)) $out_files"
+        eval "${input:+pv $input |} brp - $((${mapcolumn} - 1)) ${out_files}"
     else
         ####
         # use awk if we don't have 'brp'
