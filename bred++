@@ -1,5 +1,14 @@
 #!/bin/bash -eu
 
+################################################################################
+# 
+#       'bred++': A wrapper for 'bred' to cascade multiple 'bred' tasks
+#
+#                                                     dakusui@gmail.com
+#
+#  Mar/19/2015 Newly created.
+# 
+################################################################################
 read_stdin() {
     while IFS="" read -r _line
     do
@@ -178,12 +187,12 @@ main() {
     read_bred_records "$1" $(dirname "$1")
 
     # start pipleline
-    echo "starting pipeline"
+    echo "starting pipeline" >2&
     mkfifo "${bredout}"
     read_stdin | execstage "${firsttask}" 100
     cat "${bredout}"
     rm "${bredout}"
-    echo "done"
+    echo "done"  >2&
 }
 
 main $@

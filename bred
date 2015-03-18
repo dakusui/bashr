@@ -4,7 +4,8 @@
 ################################################################################
 # 
 #   'bred': 'bashreduce', mapreduce in bash (by erik@fawx.com), enhanced
-#   * dakusui@gmail.com
+#
+#                                                      dakusui@gmail.com
 #
 #   Feb/26/2015 Changes from 'bashreduce':
 #   * Abolished 'brm': I gave up making it consistent with 'sort -m'.
