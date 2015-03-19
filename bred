@@ -144,7 +144,7 @@ bred_compose_task() {
     fi
 
     local usercode=
-    local envvars="BRED_WORKER_IDX=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\" BRED_USERCODE='$userfunc'"
+    local envvars="BRED_PART_ID=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\" BRED_USERCODE='$userfunc'"
     case "$mode" in
         map)
             if [[ -z "$userfunc" ]]; then

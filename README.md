@@ -165,13 +165,13 @@ But still only text files can be stored.
 ### Creating a directory
 Creating a directory is like this.
 ```
-echo "" | ./bred -r 'mkdir -p /tmp/bredfs/${BRED_WORKER_IDX}/work' -T '-n' -c 1
+echo "" | ./bred -r 'mkdir -p /tmp/bredfs/${BRED_PART_ID}/work' -T '-n' -c 1
 ```
 
 ```/tmp/bredfs``` is the directory in which you want to store your data. And this path can be anything as long as it is
 available on all the hosts.
 
-The string ```${BRED_WORKER_IDX}``` is the trick. This portion will be expanded differently on runtime depending on which
+The string ```${BRED_PART_ID}``` is the trick. This portion will be expanded differently on runtime depending on which
 ssh processes, not on which hosts, so you do not break your data even if you specify a certain host name multiple times.
 
 The portion ```/work``` is the path in the file system of poor man's DFS.
@@ -179,16 +179,16 @@ Similarly,
 
 ### Writing a file
 ```
-nl -w 1 -b a ~/Documents/FSM.md | bred -r 'cat > /tmp/bredfs/${BRED_WORKER_IDX}/work/FSM.md' -T '-n' -c 1 >& /dev/null
+nl -w 1 -b a ~/Documents/FSM.md | bred -r 'cat > /tmp/bredfs/${BRED_PART_ID}/work/FSM.md' -T '-n' -c 1 >& /dev/null
 ```
 ### Reading a file
 ```
-echo "" | bred -r 'cat /tmp/bredfs/${BRED_WORKER_IDX}/work/FSM.md' -T '-n' -c 1 2> /dev/null | cut -f2-
+echo "" | bred -r 'cat /tmp/bredfs/${BRED_PART_ID}/work/FSM.md' -T '-n' -c 1 2> /dev/null | cut -f2-
 ```
 
 ### Listing a directory
 ```
-echo "" | ./bred -r 'ls /tmp/bredfs/${BRED_WORKER_IDX}/work |sort' -T '-n' -c 1 2> /dev/null | sort -m | uniq
+echo "" | ./bred -r 'ls /tmp/bredfs/${BRED_PART_ID}/work |sort' -T '-n' -c 1 2> /dev/null | sort -m | uniq
 ```
 
 ## Classic examples

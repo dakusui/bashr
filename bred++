@@ -1,14 +1,5 @@
 #!/bin/bash -eu
 
-################################################################################
-# 
-#       'bred++': A wrapper for 'bred' to cascade multiple 'bred' tasks
-#
-#                                                     dakusui@gmail.com
-#
-#  Mar/19/2015 Newly created.
-# 
-################################################################################
 read_stdin() {
     while IFS="" read -r _line
     do
@@ -16,25 +7,12 @@ read_stdin() {
     done
 }
 
-
-# _taskdef will look like '{arg1};{arg2};...;{argn}:{taskdeffile}'
-# * taskdeffile portion can't contain a colon (:) 
-read_taskfile() {
-    local _dir=$1
-    local _taskdef=$2
-    local _filename="${_taskdef##*:}"
-    if [[ "${_filename}" != "/"* ]]; then
-	_filename="${_dir}/${_filename}"
-    fi
-    local _args="${_taskdef%:*}"
-    eval "cat ${_filename} | ${_args} envsubst"
-}
-
 read_task() {
     local _bredfile_dir="$2"
     local _ret=""
     case $1 in
-	file:*)   _ret="'"$(read_taskfile "${_bredfile_dir}" "${1:5}")"'";;
+	file:/*)  _ret="'""$(cat ${1:5})""'";;
+	file:*)   _ret="'""$(cat ${_bredfile_dir}/${1:5})""'";;
 	inline:*) _ret="${1:7}";;
 	*)        echo "${prog}: line ${LINENO}: Unknown scheme is specified. (${1})" >&2 ; exit 1 ;;
     esac
@@ -52,7 +30,7 @@ read_bred_records() {
 	    continue
 	fi
 	_task=$(read_task "${_task}" "${2}")
-	printf "id=${_id},type=${_type},sinks=${_sinks},key=${_key},interpreter=${_interpreter},task=${_task}\n" >&2
+	printf "id=${_id},type=${_type},sinks=${_sinks},key=${_key},interpreter=${_interpreter},task=${_task}\n"
 	if [ ${tasktype[${_id}]+_} ]; then
 	    echo "${prog}: line ${LINENO}: The key ${_id} is defined more than once" >&2
 	    exit 1
@@ -105,7 +83,7 @@ exectask() {
 	echo "${prog}: line ${LINENO}: Unknown task type ${_tasktype} was specified."  >&2
 	exit 1
     fi
-    echo "${cmd}" >&2
+    # echo "${cmd}" >&2
     eval "${cmd}"
 }
 
@@ -187,12 +165,12 @@ main() {
     read_bred_records "$1" $(dirname "$1")
 
     # start pipleline
-    echo "starting pipeline" >2&
+    echo "starting pipeline"
     mkfifo "${bredout}"
     read_stdin | execstage "${firsttask}" 100
     cat "${bredout}"
     rm "${bredout}"
-    echo "done"  >2&
+    echo "done"
 }
 
 main $@
