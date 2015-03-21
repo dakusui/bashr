@@ -8,4 +8,5 @@ br
 *.out
 *.o
 *.txt
+*.log
 brp

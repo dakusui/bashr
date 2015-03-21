@@ -1,0 +1,5 @@
+#!/home/hiroshi/bin/bred++
+#Id    Type Sinks  Key Interpreter Task
+Map1   M    Map2   1   sh;-c       inline:'xargs cat'
+Map2   M    Reduce 1   awk         file:map.awk
+Reduce R    -      1   awk         file:reduce.awk

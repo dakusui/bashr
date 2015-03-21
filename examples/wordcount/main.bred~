@@ -1,0 +1,5 @@
+#!/home/hiroshi/bin/bred++
+
+#Id    Type Sinks          Key Interpreter Task
+Map    M    Reduce         -   awk         file:map.awk
+Reduce R    -              1   awk         inline:'{ print "Ind1",$0; }'
