@@ -1,0 +1,493 @@
+#!/bin/bash -eu
+
+################################################################################
+#
+#     'xbred'(crossbred): A controller program for multiple 'bred' scripts.
+#
+#                                                         dakusui@gmail.com
+#
+#  Mar/19/2015 Newly created.
+#  * Naming convention in this script:
+#    ENVIRONMENT_VARIABLE
+#    global_variable
+#    _local_variable
+#    function_name
+################################################################################
+
+####
+# Prints usage and exits with status code 2
+usage() {
+  echo "Usage: ${prog} "
+  echo "       ${prog} -h for help."
+  exit 2
+}
+
+####
+# Writes a debug message
+debug() {
+  if [ "${XBRED_DEBUG:-off}" == "on" ]; then
+    echo "${prog}: DEBUG: ${1}" >&2
+  fi
+}
+
+####
+# Writes a string to stderr
+msg() {
+  echo "${prog}: ${1}" >&2
+}
+
+####
+# Writes a string to stderr and exit qith status code 1
+quit() {
+  msg "${1}"
+  exit 1
+}
+
+####
+# Reads stdin and forward it to stdout.
+read_stdin() {
+  while IFS="" read -r _line
+  do
+    echo "${_line}"
+  done
+}
+
+# WARNING: (t.b.d.) unfortunately, this function isn't safe enough since xbred forks background jobs
+#          but race condition is not considered.
+current_tasknum() {
+  cat "${bred_current_tasknum}"
+}
+
+# WARNING: (t.b.d.) unfortunately, this function isn't safe enough since xbred forks background jobs
+#          but race condition is not considered.
+increment_tasknum() {
+  local _cur=$(current_tasknum)
+  echo -n $((${_cur} + 1)) > "${bred_current_tasknum}"
+}
+
+####
+# Prints the content of taskdef file specified by $2.
+# The taskdef should look like '{arg1};{arg2};...;{argn}:{taskdeffile}'
+# And each arg looks like 'ENV_VAR=value'.
+# Strings in the content which look like environment variables are
+# expanded by envsubst. This means even if you do not define environment variables
+# explicitly, ones you already have in your environment are expanded automatically.
+#
+# In order to escape the expansion, you can do '${DOLLAR}SOME_ENV_VAR' instead of
+# '$SOME_ENV_VAR' in the content.
+#
+# Parameters:
+# $1 the directory from which the file is read if 'taskdeffile' portion
+#    in taskdef doesn't start with '/'.
+# $2 taskdef discussed above.
+#
+# Limitation: taskdeffile portion can't contain a colon (:)
+read_taskfile() {
+  local _dir=$1
+  local _taskdef=$2
+  local _filename="${_taskdef##*:}"
+  if [[ "${_filename}" != "/"* ]]; then
+    _filename="${_dir}/${_filename}"
+  fi
+  local _args=""
+  if [[ "${_taskdef}" == *":"* ]]; then
+    _args="${_taskdef%:*}"
+  fi
+  eval "cat ${_filename} | DOLLAR='$' BRED_SELF='${xbredfile}' ${_args} envsubst"
+}
+
+####
+# Reads 'task' field and print it. The field should look like 'file:...' or 'inline:...'.
+# If the task starts with 'file:', read_taskfile will be performed.
+# If it starts with 'inline:', the substring after the first colon will be printed.
+# Otherwise exits with status code 1.
+#
+# Parameters:
+# $1 the task field's value
+# $2 the directory from which the file is read if the task field's scheme is 'file'
+#    and the path doesn't start with '/'.
+#
+# See also: read_task_file
+read_task() {
+  local _xbredfile_dir="$2"
+  local _ret=""
+  case $1 in
+    file:*)   _ret="'"$(read_taskfile "${_xbredfile_dir}" "${1:5}")"'";;
+    inline:*) _ret="${1:7}";;
+    *)        echo "${prog}: line ${LINENO}: Unknown scheme is specified. (${1})" >&2 ; exit 1 ;;
+  esac
+  echo "$_ret"
+}
+
+read_xbred_file() {
+  local _tasknum=0
+  local _id _type _sinks _key _interpreter _task
+  firsttask=""
+  while read -r _id _type _sinks _key _interpreter _task
+  do
+    # Ignore records which start with '#'
+    if [[ "$_id" == "#"* || -z "$_id" ]]; then
+      continue
+    fi
+    _task=$(read_task "${_task}" "${2}")
+    debug "id=${_id},type=${_type},sinks=${_sinks},key=${_key},interpreter=${_interpreter},task=${_task}\n"
+    if [ ${tasktype[${_id}]+_} ]; then
+      quit "line ${LINENO}: The key ${_id} is defined more than once"
+    fi
+    if [ ${_tasknum} == 0 ]; then
+      firsttask=${_id}
+    fi
+    tasktype[${_id}]=${_type}
+    sinks[${_id}]=${_sinks//\;/ }
+    key[${_id}]=${_key}
+    interpreter[${_id}]=${_interpreter//\;/ }
+    task[${_id}]=${_task}
+    connected[${_id}]=""
+    _tasknum=$((${_tasknum} + 1))
+  done <"$1"
+  if [ -z "${firsttask}" ]; then
+    quit "line ${LINENO}: No task was found."  >&2
+    exit 1
+  fi
+}
+
+####
+# Prints key of the first task referenced by task $1.
+# If the task $1's has only one sink and it is '-'(stdout), 1 will be printed.
+#
+# Parameters:
+# $1 task id to be executed
+nextkey() {
+  if [ "${sinks[$1]}" == "-" ]; then
+    echo 1
+  else
+    local _sinks
+    local _k
+    IFS=" " read -ra _sinks <<< "${sinks[${1}]}"
+    _k="${_sinks[0]}"
+    currentkey ${_k}
+  fi
+}
+
+####
+# Prints key for task specified by $1
+#
+# Parameters:
+# $1 task id
+currentkey() {
+  local _key="${key[${1}]}"
+  if [ "${_key}" == "-" ]; then
+    _key=1
+  fi
+  echo "${_key}"
+}
+
+####
+# Prints sinks for the specified task
+#
+# Parameters:
+# $1 task id
+get_sinks() {
+  local _sinks
+  IFS=" " read -ra _sinks <<< "${sinks[${1}]}"
+  debug "INFO: get_sinks: ${_sinks[@]}"
+  echo ${_sinks[@]}
+}
+
+####
+# Prints number of sinks of a task specified by $1
+#
+# Parameters:
+# $1 task id whose sinks should be counted.
+#
+# Notes:
+# * This function assumes validations should be done in advance.
+# * Global variable 'sinks' is read by this function.
+num_sinks() {
+  local _numsinks=0
+  IFS=" " read -ra _sinks <<< "${sinks[${1}]}"
+  for _s in "${_sinks[@]}"; do
+    _numsinks=$((${_numsinks} + 1))
+  done
+  echo "${_numsinks}"
+}
+
+####
+# Checks if a kerconverter is necessary.
+# Returns 1 if it is. 0 otherwise.
+#
+# Parameters:
+# $1 source side task name
+# $2 sink side task name
+requires_keyconverter() {
+  debug "INFO: requires_keyconverter: \$1=${1}, \$2=${2}"
+  if [ "$2" == "-" ]; then
+    return 0
+  elif [ "${key[$1]}" == "${key[$2]}" ]; then
+    return 0
+  elif [ "${tasktype[$1]}" != "R" ]; then
+    return 0
+  fi
+  return 1
+}
+
+####
+# Checks if sort is necessary before sink side task is executed.
+# Returns 1 if it is. 0 otherwise.
+#
+# Parameters:
+# $1 source side task name
+# $2 sink side task name
+requires_sort_on_out() {
+  local _num_sinks=$(num_sinks $1)
+  if [ "${_num_sinks}" -gt 1 ]; then
+    debug "INFO: requires_sort_on_out: NO: more than one sinks (${_num_sinks})"
+    return 0
+  fi
+  local _s="${sinks[$1]}"
+  if [[ "${_s}" == "-" || ! "${tasktype[${_s}]}" == "R" ]]; then
+    debug "INFO: requires_sort_on_out: NO: non-R sink"
+    return 0
+  fi
+    debug "INFO: requires_sort_on_out: YES"
+  return 1
+}
+
+####
+# Prints a key converter command line.
+# Returns 1 if key conversion is necessary, 0 otherwise.
+#
+# Parameters:
+# $1 source side task name
+# $2 sink side task name
+# $3 task id for keyconverter
+compose_keyconverter() {
+  debug "START: compose_keyconverter: \$1='$1' \$2='$2'"
+  local _logfile="${logdir}/converter-${1}-${2}.log"
+  local _k1="${key[$1]}"
+  if [[ "${_k1}" == "-" ]]; then
+    _k1=1
+  fi
+  local _k2="${key[$2]}"
+  if [[ "${_k2}" == "-" ]]; then
+    _k2=1
+  fi
+  local _cmd="bred -e ${_logfile} -j ${3} -c ${_k1} -s ${_k2} -M map -I \"sh -c\" -r 'cat'|"
+  debug "END: compose_keyconverter: ${_cmd}"
+}
+
+compose_single_task() {
+  requires_sort_on_out "$1"
+  local _requires_sort_on_out=$?
+  local _sort_on_out="-O no"
+  local _logfile="${logdir}/task-${1}.log"
+  local _tasktype=${tasktype["${1}"]}
+  local _cmd=""
+  local _tasknum=$(current_tasknum)
+  if [ "${_requires_sort_on_out}" == 1 ]; then
+    _sort_on_out="-s \"$(nextkey ${1})\""
+  fi
+  # value ${task[${1}]} itself is already quoted, so we don't need to quote it in _cmd again.
+  if [[ "${_tasktype}" == "M" ]]; then
+    _cmd="bred -e ${_logfile} -c \"$(currentkey ${1})\" ${_sort_on_out} -M map -j \"${_tasknum}\" -I \"${interpreter[${1}]}\" -r ${task[${1}]}"
+  elif [[ "${_tasktype}" == "R" ]]; then
+    _cmd="bred -e ${_logfile}  -c \"$(currentkey ${1})\" ${_sort_on_out} -M reduce -j \"${_tasknum}\" -I \"${interpreter[${1}]}\" -r ${task[${1}]}"
+  elif [[ "${_tasktype}" == "L" ]]; then
+    _cmd="XBRED_START_TASKNUM=$((${start_tasknum} + ${numtasks})) ${interpreter[${1}]} ${task[${1}]}"
+  else
+    quit "${prog}: line ${LINENO}: Unknown task type ${_tasktype} was specified."
+  fi
+  _cmd="BRED_SELF='${xbredfile}' ${_cmd}"
+  increment_tasknum
+  echo "${_cmd}"
+}
+
+compose_task() {
+  debug "START: compose_task: '$1'"
+  local _i
+  local _num_sinks=0
+  local _tasknum=$(current_tasknum)
+  local _cmd=""
+  # count number of sinks for this task
+  _num_sinks=$(num_sinks $1)
+  if [[ "${_num_sinks}" -le 0 ]]; then
+    quit "${prog}: line ${LINENO}: No sink was defined for task ${1}."
+  elif [[ "${_num_sinks}" == 1 ]]; then
+    local _s="${sinks[${1}]}"
+    debug "INFO: compose_task: output of '$1'(${_tasknum}) is cascaded to a single sink '${sinks[${1}]}'"
+    if [ "${_s}" == "-" ]; then
+      _cmd="$(compose_single_task ${1}) > ${bredout} &"
+    else
+      _cmd="$(compose_single_task ${1}) | $(compose_task ${_s})"
+    fi
+  else
+    local _sinks=$(get_sinks "${1}")
+    local _tee="tee"
+    # $_s for a sink
+    debug "INFO: compose_task: output of '$1' is cascaded to multiple sinks '${_sinks[@]}' : ${_tasknum}"
+    for _s in ${_sinks[@]}; do
+      debug "INFO: compose_task: ${_s}"
+      requires_keyconverter "${1}" "${_s}"
+      local _ret=$?
+      local _keyconverter=""
+      local _subtask=$(compose_task "${_s}")
+      if [ "$_ret" == 1 ]; then
+	_keyconverter=$(compose_keyconverter "${1}" "${_s}")
+	increment_tasknum
+      fi
+      _tee="${_tee} >(${_keyconverter} ${_subtask} > /dev/null)"
+    done
+    increment_tasknum
+    _cmd="$(compose_single_task ${1}) | ${_tee} > /dev/null"
+  fi
+  debug "END: compose_task: '$1' : _tasknum updated ${_tasknum}->$(current_tasknum) : '${_cmd}'"
+  echo "${_cmd}"
+}
+
+exec_single_task() {
+  debug "START: exec_single_task"
+  local _cmd="$(compose_single_task ${1})"
+  debug "END: exec_single_task: '${_cmd}'"
+  eval "${_cmd}"
+}
+
+exec_task() {
+  debug "START: exec_task: '$1'"
+  local _cmd="$(compose_task ${1})"
+  debug "END: exec_task: '$1' '${_cmd}'"
+  eval "${_cmd}"
+}
+
+####
+# Counts and prints number of tasks including 'converters'.
+#
+# $1 current task's name
+# $2 number of tasks
+count_tasks_in_xbred_file() {
+  local _num=${2:-0}
+  if [ "${tasktype[$1]}" == "M" ] ; then
+    _num=$((${_num} + 1))
+  elif [ "${tasktype[$1]}" == "R" ] ; then
+    _num=$((${_num} + 1))
+  fi
+  local _sinks=""
+  IFS=" " read -ra _sinks <<< "${sinks[${1}]}"
+  first=1
+  for _s in "${_sinks[@]}"; do
+    if [ "${_s}" == "-" ]; then
+      continue
+    fi
+    requires_keyconverter "${1}" "${_s}"
+    local _ret=$?
+    if [ "${first}" == 0 ] && [ "$_ret" == 1 ]; then
+      _num=$((${_num} + 1))
+    fi
+    first=0
+    _num=$(count_tasks_in_xbred_file "${_s}" "${_num}")
+  done
+  echo ${_num}
+}
+
+validate_xbred_file_record() {
+  # (t.b.d.)
+  :
+}
+
+validate_xbred_file() {
+  # (t.b.d.)
+  # if [ ${_s} != '-' ] && [ ! -z "${connected[${_s}]}" ]; then
+  #   quit "${prog}: line ${LINENO}: ${_s} is already connected to '${connected[${_s}]}'."
+  # fi
+  :
+}
+
+####
+# Validates global variables set by user options.
+validate_opts() {
+  :
+  # bredtask=""
+  # jobmode="normal"
+  # logdir="$(pwd)"
+  # tmpdir="/tmp"
+  # xbredfile=$(readlink -e "${1}")
+}
+
+####
+# Parses user options and assigns them to global variables that follow.
+# * bredtask
+# * jobmode   (default=normal)
+# * logdir    (default=(current directory))
+# * tmpdir    (default=/tmp)
+# * xbredfile (default=(none, mandatory))
+#
+# Parameters:
+# $@ command line arguments
+parse_opts() {
+  local _name="";
+  bredtask=""
+  jobmode="normal"
+  logdir="$(pwd)"
+  tmpdir="/tmp"
+  while getopts "k:m:l:t" _name; do
+    case "${_name}" in
+      k)   bredtask=${OPTARG};;
+      m)   jobmode=${OPTARG};;
+      l)   logdir=${OPTARG};;
+      [?]) usage $0;;
+    esac
+  done
+
+  shift $(( OPTIND - 1 ))
+  xbredfile=$(readlink -e "${1}")
+}
+
+################
+#
+# MAIN ENTRY POINT
+#
+main() {
+  # Initialize global variables
+  prog="`basename $0`"
+  parse_opts $@
+  bredout="${tmpdir}/xbred-`uuidgen`"
+  bred_current_tasknum="${bredout}.current_tasknum"
+  declare -A tasktype
+  declare -A sinks
+  declare -A key
+  declare -A interpreter
+  declare -A task
+  declare -A connected
+  debug "START: main: args='${@}'"
+
+  # Validate inputs
+  validate_opts
+  validate_xbred_file
+  # read records from job definition file
+  read_xbred_file "${xbredfile}" $(dirname "$xbredfile")
+  # If bred task isn't by user, pick up the first one in the xbred
+  # file and useit
+  firsttask=${bredtask:-${firsttask}}
+  numtasks=$(count_tasks_in_xbred_file ${firsttask})
+  start_tasknum=${XBRED_START_TASKNUM:-0}
+  # Initialize the current tasknum
+  echo -n "${start_tasknum}" > "${bred_current_tasknum}"
+  debug "INFO: main: start_tasknum=${start_tasknum} numtasks(effective)=${numtasks}"
+  if [ "$jobmode" == "normal" ]; then  
+    # start pipleline
+    msg "starting pipeline"
+    mkfifo "${bredout}"
+    read_stdin | exec_task "${firsttask}" 
+    cat "${bredout}"
+    rm "${bredout}"
+    rm "${bred_current_tasknum}"
+    msg "done"
+  elif [ "$jobmode" == "single" ]; then
+    read_stdin | exec_single_task "${firsttask}"
+  else
+    quit "Unknown job execution mode '$jobmode' is specified."
+  fi
+  debug "END: main"
+}
+
+main $@
+

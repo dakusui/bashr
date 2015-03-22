@@ -79,7 +79,7 @@ find $(pwd) -type f -name '*.md' |nl -w 1 -s ' ' -b a|tee docid.dat |pv |bred -c
   for (l=1; (getline line < $2) > 0; l++) {
      gsub(/([[:punct:]]|[[:blank:]])+/, " ", line);
      n=split(line,cols," ");
-     for (i = 2; i < n; i++) { print $1, l, cols[i]; };
+     for (i = 1; i <= n; i++) { print $1, l, cols[i]; };
   }
 }' |tee terms.dat |pv |bred -c 3 -s 1 -O no -M reduce -j 1 -S1G -I 'awk' -r 'BEGIN { p=""; key="";} {
     if (key == "") key=$3;

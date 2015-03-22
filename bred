@@ -138,7 +138,7 @@ bred_compose_task() {
     local usercode_errlog="${3}/err_${host_idx}-usercode.err"
     local sorter_errolog="${3}/err_${host_idx}-sorter.err"
 
-    sorter=""
+    sorter="2>$sorter_errolog"
     if [ "$sort_on_out" == "yes" ] ; then
 	sorter="| LC_ALL='$LC_ALL' sort -S$sort_mem -T$tmp_dir -k$sort_column,$sort_column $sort_opt  2>$sorter_errolog"
     fi
@@ -353,10 +353,10 @@ bred_executetask() {
 
     ####    
     # finally, clean up after ourselves
-    rm -rf "$jobpath"
-    for host in ${hosts}; do
-        ssh "$host" "rm -fr ${nodepath:?'node path isn't set''}"
-    done
+    # rm -rf "$jobpath"
+    # for host in ${hosts}; do
+    #    ssh "$host" "rm -fr ${nodepath:?'node path isn't set''}"
+    # done
     
     ####    
     # TODO: is there a safe way to kill subprocesses upon fail?

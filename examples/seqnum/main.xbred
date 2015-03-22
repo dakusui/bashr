@@ -1,0 +1,16 @@
+#!/usr/local/bin/xbred
+
+####
+#Top level task to generate partition id -> partition offset
+#Id Type Sink s     Key Interpreter Task
+r   L    -          -   sh;-c       inline:'xbred ${XBRED_SELF} -k 0'
+####
+#Give a partition id to each item
+0   M    1,>tmp.txt -   awk         inline:'{ print $ENVIRON["BRED_PART_ID"],i++,$0; }'
+####
+#Count number of items in each partition.
+1   R    2          1   awk         inline:'BEGIN { i=0; } { i++; } END { print ENVIRON["BRED_PART_ID"],i; }'
+####
+#Calculate each partition's offset
+2   L    >out.txt   -   awk         inline:'BEGIN { i=0; } { print $1,i+$2; }'
+3   M    0          1   awk         inline:'BEGIN { read offset from a file here; offset=0; } { l=offset+$2; $1=$2=""; print l,$0; }'
