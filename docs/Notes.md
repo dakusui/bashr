@@ -1,0 +1,6 @@
+```bash
+
+bred --source="$(bred)"
+
+
+```

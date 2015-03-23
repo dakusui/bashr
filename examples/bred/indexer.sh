@@ -26,14 +26,14 @@
 #######################################################################################################################
 
 eval dirname="${1:-$(pwd)}" # Expand ~ and . to an actual path.
-find "$dirname" -type f -name ${2:-"*.txt"} |nl -w 1 -s ' ' -b a|tee docid.dat |pv |bred -c 1 -s 3 -S1G -M map -j 0 -I 'awk' -r '{
+find "$dirname" -type f -name ${2:-"*.txt"} |nl -w 1 -s ' ' -b a|tee docid.dat |pv |bred -e /dev/null -c 1 -s 3 -S1G -M map -j 0 -I 'awk' -r '{
   for (l=1; (getline line < $2) > 0; l++) {
      gsub(/([[:punct:]]|[[:blank:]])+/, " ", line);
      n=split(line,cols," ");
-     for (i = 2; i < n; i++) { print $1, l, cols[i]; };
+     for (i = 1; i <= n; i++) { print $1, l, cols[i]; };
   }
-}' |tee terms.dat |pv |bred -c 3 -s 1 -O no -M reduce -j 1 -S1G -I 'awk' -r 'BEGIN { p=""; key="";} {
-    if (key == "") key=$3;
-    p=p " " $1 "," $2
+}' |tee terms.dat |pv |bred -e /dev/null -c 3 -s 1 -O no -M reduce -j 1 -S1G -I 'awk' -r 'BEGIN { p=""; key="";} {
+  if (key == "") key=$3;
+  p=p " " $1 "," $2
 } END { print "" key " " p; }' ${3:+"-o $3"}
 
