@@ -123,6 +123,59 @@ bred_parseopt() {
     jobid=${jobid:-"`uuidgen`"}
 }
 
+####
+# Composes a string to initialize a file in "poorman's DFS"
+#
+# Parameters:
+# $1: A base directory of the local stroage of poorman's DFS
+bredfs_compose_init() {
+  local _fsbase=${1}
+  local _s='echo "" | bred -r "mkdir -p %s/\${BRED_PART_ID}/$(dirname ${STORE_NAME}) ; truncate -s 0 %s/\${BRED_PART_ID}/$(dirname ${STORE_NAME})/$(basename ${STORE_NAME})" -T "-n" -c 1'
+  printf "${_s}" "${_fsbase}" "${_fsbase}"
+}
+
+####
+# Composes a string to write file to "poorman's DFS"
+#
+# Parameters:
+# $1: A name node address (the host where bred/brp is installed)
+# $2: A base directory of the local stroage of poorman's DFS
+bredfs_compose_write() {
+  # nl -w 1 -b a ~/Documents/FSM.md | bred -r 'cat > /tmp/bredfs/${BRED_WORKER_IDX}/work/FSM.md' -T '-n' -c 1 >& /dev/null
+  local _namenode=(${1})
+  local _fsbase=${2}
+
+  local _f='nl -w 1 -b a ${APPEND} | ssh -o SendEnv=TO localhost "bred -r '\''cat >> /tmp/bredfs/\${BRED_PART_ID}/${TO}'\'' -T '\''-n'\'' -c '\''1'\''"'
+  printf "${_f}" ${_namenode} ${_fsbase} '${TO}'
+}
+
+####
+# Composes a string to read file from "poorman's DFS"
+# If you are on a host not belonging to br.hosts, use '-' for the second parameter.
+#
+# Parameters:
+# $1: A base directory of the local stroage of poorman's DFS
+# $2: A partition id from which the data is read.
+# $3: A string which lists hosts read from br.hosts file.
+bredfs_compose_read() {
+  local _fsbase=${1}
+  local _partid=${2}
+  local _hosts=(${3})
+  local _i
+  local _s="sort -m ${ORDER_BY:--k1,1} "
+  for _i in $(seq 0 $((${#_hosts[@]} - 1))); do
+    if [ "${_i}" == "${_partid}" ]; then
+      _s="${_s} <(sh -c \""
+    else
+      _s="${_s} <(ssh ${_hosts[${_i}]} \""
+    fi
+    _s="${_s} cat ${_fsbase}/${_i}/"
+    _s="${_s}"'${FROM:?FROM is mandatory} ${WHERE:+|$WHERE} ${ORDER_BY:+|sort $ORDER_BY} ${SELECT:+|$SELECT}'
+    _s="${_s} \") "
+  done
+  echo "${_s}"
+}
+
 # * in
 #   (params)     mode, host_idx, nodepath
 #   (enviromnet) LC_ALL
@@ -144,7 +197,14 @@ bred_compose_task() {
     fi
 
     local usercode=
-    local envvars="BRED_PART_ID=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\" BRED_USERCODE='$userfunc'"
+    local envvars=
+    local namenode=$(hostname)
+    envvars="BRED_PART_ID=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\""
+    envvars="${envvars} BRED_USERCODE='$userfunc'"
+    envvars="${envvars} BREDFS_INIT='$(bredfs_compose_init /tmp/bredfs)'"
+#    envvars="${envvars} BREDFS_WRITE='$(bredfs_compose_write ${namenode} /tmp/bredfs)'"
+    envvars="${envvars} BREDFS_READ='$(bredfs_compose_read /tmp/bredfs 1 "${hosts}")'"
+
     case "$mode" in
         map)
             if [[ -z "$userfunc" ]]; then

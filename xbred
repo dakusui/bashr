@@ -404,7 +404,7 @@ validate_xbred_file() {
 ####
 # Validates global variables set by user options.
 validate_opts() {
-  :
+  
   # bredtask=""
   # jobmode="normal"
   # logdir="$(pwd)"
@@ -437,6 +437,18 @@ parse_opts() {
     esac
   done
 
+  ##
+  # Validations
+  # -k (bredtask)
+  if [[ "$bredtask" =~ [^a-zA-Z0-9] ]]; then
+    quit "Task name can contain only a-zA-Z0-9"
+  fi
+  # -m (jobmode)
+  case ${jobmode} in
+    normal|single) ;;
+    *) quit "Unknown jobmode ${jobmode} is specified.(-m)";;
+  esac
+  
   shift $(( OPTIND - 1 ))
   xbredfile=$(readlink -e "${1}")
 }
@@ -484,7 +496,7 @@ main() {
   elif [ "$jobmode" == "single" ]; then
     read_stdin | exec_single_task "${firsttask}"
   else
-    quit "Unknown job execution mode '$jobmode' is specified."
+    quit "Unsupported job execution mode '$jobmode' is specified."
   fi
   debug "END: main"
 }
