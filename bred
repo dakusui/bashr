@@ -36,7 +36,7 @@ showhelp() {
   echo   "      default hosts from ~/.br.hosts or /etc/br.hosts"
   echo   "  -p: base port, default = 8192"
   echo   "  -M: mode ('map', 'reduce', 'compat'), default = 'compat'"
-  echo   "  -I: interpreter. ignored if 'compat' mode is used, default = 'sh -c'"
+  echo   "  -I: interpreter. ignored if 'compat' mode is used, default = 'bash -c'"
   echo   "  -j: job index, default = 0"
   echo   "  -c: column to partition, default = 1 (1-based)"
   echo   "  -i: input file, default = stdin"
@@ -66,7 +66,7 @@ bred_parseopt() {
   base_port=8192
   job_idx=0
   mode='compat'
-  interpreter='sh -c'
+  interpreter='bash -c'
   hosts=
   mapcolumn=1
   userfunc=
@@ -292,7 +292,7 @@ bred_executetask() {
         # 1) compose 'task' component based on execution mode (map, reduce, or compat)
         bred_compose_task "$mode" "$host_idx" "$nodepath"
         # 2) start the task.
-        ssh "$host" -n "$(typeset -f bredfs) ; \
+        ssh "$host" -n "\
             tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
                     $task \
                     | nc -q0 -l -p $port_in >&/dev/null &"

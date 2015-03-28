@@ -77,6 +77,23 @@ function bredcheckenv_passwordless_ssh_is_ok() {
     fi
 }
 
+####
+# Make sure your login shell is bash.
+#
+# Fix in case of fail:
+# 1. Make sure bredcheckenv_passwordless_ssh_is_ok is passing.
+# 2. Do 'chsh -s /bin/bash'
+function bredcheckenv_loginshell_is_bash() {
+    if [ $1 == 'expected' ]; then
+        echo 'bash'
+    elif [ $1 == 'actual' ]; then
+        timeout 5 ssh localhost 'echo $0'
+    else
+        echo "Invalid mode $1 is specified"
+        exit 1
+    fi
+}
+
 function bredcheckenv_brp_is_installed() {
     if [ $1 == 'expected' ]; then
         echo '1'
