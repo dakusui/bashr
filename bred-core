@@ -32,7 +32,7 @@ bredfs_compose_write() {
   local _namenode=(${1})
   local _fsbase=${2}
 
-  local _f='nl -w 1 -b a -s " " ${APPEND} | ssh -o SendEnv=TO localhost "bred -r '\''cat >> /tmp/bredfs/\${BRED_PART_ID}/${TO}'\'' -T '\''-n'\'' -c '\''1'\''"'
+  local _f='nl -w 1 -b a -s " " ${APPEND} | ssh -o SendEnv=TO localhost "bred -r '\''cat >> '${_fsbase}'/\${BRED_PART_ID}/${TO}'\'' -T '\''-n'\'' -c '\''1'\''"'
   printf "${_f}" ${_namenode} ${_fsbase} '${TO}'
 }
 
@@ -67,9 +67,10 @@ bredfs_exportenv() {
   local _host_idx="${1:-}"
   local _hosts=$(bred_load_brhosts $2)
   local _namenode="${_hosts[0]}"
-  export BREDFS_INIT=$(bredfs_compose_init '/tmp/bredfs' | base64 -w 0)
-  export BREDFS_WRITE=$(bredfs_compose_write "${_namenode}" '/tmp/bredfs' | base64 -w 0)
-  export BREDFS_READ=$(bredfs_compose_read '/tmp/bredfs' "${_host_idx:-'-'}" "${_hosts}" | base64 -w 0)
+  local _fsbase="${3:-/tmp/bredfs}"
+  export BREDFS_INIT=$(bredfs_compose_init "${_fsbase}" | base64 -w 0)
+  export BREDFS_WRITE=$(bredfs_compose_write "${_namenode}" "${_fsbase}" | base64 -w 0)
+  export BREDFS_READ=$(bredfs_compose_read "${_fsbase}" "${_host_idx:-'-'}" "${_hosts}" | base64 -w 0)
 }
 
 ####
@@ -92,6 +93,7 @@ bredfs_exportenv() {
 bredfs() {
   local _func
   case "${1:?Operation must be specified. Do 'help' for list}" in
+    # I couldn't simplify bredfs procedure execution procedure better than this.
     "init")   _func=$(echo -n ${BREDFS_INIT} | base64 -d);;
     "write")  _func=$(echo -n ${BREDFS_WRITE} | base64 -d);;
     "read")   _func=$(echo -n ${BREDFS_READ} | base64 -d);;
