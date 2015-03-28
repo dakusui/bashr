@@ -102,6 +102,13 @@ bred_parseopt() {
       [?])  usage $0;;
     esac
   done
+  # job_idx
+  local _nextid
+  local _jid_dir=/tmp/bred/jid
+  job_idx="$(_nextid=$(echo $(($(ls ${_jid_dir}| sort -n -r  | head --lines=1) + 1))) \
+           && mkdir ${_jid_dir}/${_nextid} && echo ${_nextid} || echo -1)"
+
+
   hosts=$(bred_load_brhosts "$hosts")
   sort_column=${sort_column:-$mapcolumn}
   # check if 'hosts' is set.

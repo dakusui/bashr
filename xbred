@@ -9,6 +9,7 @@
 #  Mar/19/2015 Newly created.
 #  * Naming convention in this script:
 #    ENVIRONMENT_VARIABLE
+#    _CONSTANT
 #    global_variable
 #    _local_variable
 #    function_name
