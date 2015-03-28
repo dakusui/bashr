@@ -23,34 +23,34 @@
 ################################################################################
 
 usage() {
-    local prog="`basename $1`"
-    echo "Usage: $prog [-m host1 [host2...]] [-c column] [-r userfunc] [-i input] [-o output] [-e error]"
-    echo "       $prog -h for help."
-    exit 2
+  local prog="`basename $1`"
+  echo "Usage: $prog [-m host1 [host2...]] [-c column] [-r userfunc] [-i input] [-o output] [-e error]"
+  echo "       $prog -h for help."
+  exit 2
 }
 
 showhelp() {
-    echo "Usage: `basename $1`: [-m host1 [host2...]] [-c column] [-r userfunc] [-i input] [-o output] [-e error]"
-    echo   "bred. bashreduce enhanced.  Map an input file to many hosts, sort/reduce, merge"
-    echo   "  -m: hosts to use, can repeat hosts for multiple cores"
-    echo   "      default hosts from ~/.br.hosts or /etc/br.hosts"
-    echo   "  -p: base port, default = 8192"
-    echo   "  -M: mode ('map', 'reduce', 'compat'), default = 'compat'"
-    echo   "  -I: interpreter. ignored if 'compat' mode is used, default = 'sh -c'"
-    echo   "  -j: job index, default = 0"
-    echo   "  -c: column to partition, default = 1 (1-based)"
-    echo   "  -i: input file, default = stdin"
-    echo   "  -o: output file, default = stdout"
-    echo   "  -e: error file, default = stderr"
-    echo   "  -r: userfunc function, default = identity"
-    echo   "  -t: tmp dir to use, default = /tmp"
-    echo   "  -S: memory to use for 'S'ort, default = 256M"
-    echo   "  -s: column to 's'ort(s) on reduce (and following merge). , default is equal to -c "
-    echo   "  -T: option given to sor'T'(s) on reduce (and following merge), default is nothing"
-    echo   "  -O: perform sort on output, ignored in 'compat' mode., default = yes"
-    echo   "  -v: verbose mode. default = no"
-    echo   "  -h: this help message"
-    exit 2
+  echo "Usage: `basename $1`: [-m host1 [host2...]] [-c column] [-r userfunc] [-i input] [-o output] [-e error]"
+  echo   "bred. bashreduce enhanced.  Map an input file to many hosts, sort/reduce, merge"
+  echo   "  -m: hosts to use, can repeat hosts for multiple cores"
+  echo   "      default hosts from ~/.br.hosts or /etc/br.hosts"
+  echo   "  -p: base port, default = 8192"
+  echo   "  -M: mode ('map', 'reduce', 'compat'), default = 'compat'"
+  echo   "  -I: interpreter. ignored if 'compat' mode is used, default = 'sh -c'"
+  echo   "  -j: job index, default = 0"
+  echo   "  -c: column to partition, default = 1 (1-based)"
+  echo   "  -i: input file, default = stdin"
+  echo   "  -o: output file, default = stdout"
+  echo   "  -e: error file, default = stderr"
+  echo   "  -r: userfunc function, default = identity"
+  echo   "  -t: tmp dir to use, default = /tmp"
+  echo   "  -S: memory to use for 'S'ort, default = 256M"
+  echo   "  -s: column to 's'ort(s) on reduce (and following merge). , default is equal to -c "
+  echo   "  -T: option given to sor'T'(s) on reduce (and following merge), default is nothing"
+  echo   "  -O: perform sort on output, ignored in 'compat' mode., default = yes"
+  echo   "  -v: verbose mode. default = no"
+  echo   "  -h: this help message"
+  exit 2
 } 
 
 
@@ -62,118 +62,59 @@ showhelp() {
 #   nodepath "${tmp_dir:-/tmp}/br_node_${jobid}}"
 # local
 bred_parseopt() {
-    LC_ALL=${LC_ALL:-""}
-    local brhostsfile="/etc/br.hosts"
-    [ -e "$HOME/.br.hosts" ] && brhostsfile="$HOME/.br.hosts"
-    base_port=8192
-    job_idx=0
-    mode='compat'
-    interpreter='sh -c'
-    hosts=
-    mapcolumn=1
-    userfunc=
-    input=
-    output=
-    error=
-    tmp_dir=/tmp
-    sort_mem=256M
-    sort_column=
-    sort_on_out="yes"
-    sort_opt=
-    verbose="no"
-     
-    while getopts "m:p:j:M:I:c:r:i:o:e:t:S:s:T:O:v:h" name; do
+  LC_ALL=${LC_ALL:-""}
+  base_port=8192
+  job_idx=0
+  mode='compat'
+  interpreter='sh -c'
+  hosts=
+  mapcolumn=1
+  userfunc=
+  input=
+  output=
+  error=
+  tmp_dir=/tmp
+  sort_mem=256M
+  sort_column=
+  sort_on_out="yes"
+  sort_opt=
+  verbose="no"
+  
+  while getopts "m:p:j:M:I:c:r:i:o:e:t:S:s:T:O:v:h" name; do
     case "$name" in
-        m)  hosts=$OPTARG;;
-        p)  baseport=$OPTARG;;
-        j)  job_idx=$OPTARG;;
-        M)  mode=$OPTARG;;
-        I)  interpreter=$OPTARG;;
-        c)  mapcolumn=$OPTARG;;
-        r)  userfunc=$OPTARG;;
-        i)  input=$OPTARG;;
-        o)  output=$OPTARG;;
-        e)  error=$OPTARG;;
-        t)  tmp_dir=$OPTARG;;
-        S)  sort_mem=$OPTARG;;
-        s)  sort_column=$OPTARG;;
-        O)  sort_on_out=$OPTARG;;
-        T)  sort_opt=$OPTARG;;
-        v)  verbose="yes";;
-        h)  showhelp $0;;
-        [?])  usage $0;;
+      m)  hosts=$OPTARG;;
+      p)  baseport=$OPTARG;;
+      j)  job_idx=$OPTARG;;
+      M)  mode=$OPTARG;;
+      I)  interpreter=$OPTARG;;
+      c)  mapcolumn=$OPTARG;;
+      r)  userfunc=$OPTARG;;
+      i)  input=$OPTARG;;
+      o)  output=$OPTARG;;
+      e)  error=$OPTARG;;
+      t)  tmp_dir=$OPTARG;;
+      S)  sort_mem=$OPTARG;;
+      s)  sort_column=$OPTARG;;
+      O)  sort_on_out=$OPTARG;;
+      T)  sort_opt=$OPTARG;;
+      v)  verbose="yes";;
+      h)  showhelp $0;;
+      [?])  usage $0;;
     esac
-    done 
-    if [ -z "$hosts" ]; then
-    if [ -e "$brhostsfile" ]; then
-        hosts=`cat "$brhostsfile"`
-    fi
-    fi
-    sort_column=${sort_column:-$mapcolumn}
-    # check if 'hosts' is set.
-    hosts=${hosts:?"`basename $0`: must specify hosts with -m or provide ~/.br.hosts or /etc/br.hosts"}
-    case "$mode" in
-        compat|map|reduce)
-            ;;
-        *)
-            echo "`basename $0`: unknown mode is specified. ($mode)"
-            usage $0
-            ;;
-    esac
-    jobid=${jobid:-"`uuidgen`"}
-}
-
-####
-# Composes a string to initialize a file in "poorman's DFS"
-#
-# Parameters:
-# $1: A base directory of the local stroage of poorman's DFS
-bredfs_compose_init() {
-  local _fsbase=${1}
-  local _s='echo "" | bred -r "mkdir -p %s/\${BRED_PART_ID}/$(dirname ${STORE_NAME}) ; truncate -s 0 %s/\${BRED_PART_ID}/$(dirname ${STORE_NAME})/$(basename ${STORE_NAME})" -T "-n" -c 1'
-  printf "${_s}" "${_fsbase}" "${_fsbase}"
-}
-
-####
-# Composes a string to write file to "poorman's DFS"
-#
-# Parameters:
-# $1: A name node address (the host where bred/brp is installed)
-# $2: A base directory of the local stroage of poorman's DFS
-bredfs_compose_write() {
-  # nl -w 1 -b a ~/Documents/FSM.md | bred -r 'cat > /tmp/bredfs/${BRED_WORKER_IDX}/work/FSM.md' -T '-n' -c 1 >& /dev/null
-  local _namenode=(${1})
-  local _fsbase=${2}
-
-  local _f='nl -w 1 -b a ${APPEND} | ssh -o SendEnv=TO localhost "bred -r '\''cat >> /tmp/bredfs/\${BRED_PART_ID}/${TO}'\'' -T '\''-n'\'' -c '\''1'\''"'
-  printf "${_f}" ${_namenode} ${_fsbase} '${TO}'
-}
-
-####
-# Composes a string to read file from "poorman's DFS"
-# If you are on a host not belonging to br.hosts, use '-' for the second parameter.
-#
-# Parameters:
-# $1: A base directory of the local stroage of poorman's DFS
-# $2: A partition id from which the data is read.
-# $3: A string which lists hosts read from br.hosts file.
-bredfs_compose_read() {
-  local _fsbase=${1}
-  local _partid=${2}
-  local _hosts=(${3})
-  local _i
-  local _s="sort -m ${ORDER_BY:--k1,1} "
-  for _i in $(seq 0 $((${#_hosts[@]} - 1))); do
-    if [ "${_i}" == "${_partid}" ]; then
-      _s="${_s} <(sh -c \""
-    else
-      _s="${_s} <(ssh ${_hosts[${_i}]} \""
-    fi
-    _s="${_s} cat ${_fsbase}/${_i}/"
-    _s="${_s}"'${FROM:?FROM is mandatory} ${WHERE:+|$WHERE} ${ORDER_BY:+|sort $ORDER_BY} ${SELECT:+|$SELECT}'
-    _s="${_s} \") "
   done
-  echo "${_s}"
+  hosts=$(bred_load_brhosts "$hosts")
+  sort_column=${sort_column:-$mapcolumn}
+  # check if 'hosts' is set.
+  hosts=${hosts:?"`basename $0`: must specify hosts with -m or provide ~/.br.hosts or /etc/br.hosts"}
+  case "$mode" in
+    compat|map|reduce)
+      ;;
+    *)
+      echo "`basename $0`: unknown mode is specified. ($mode)"
+      usage $0
+      ;;
+  esac
+  jobid=${jobid:-"`uuidgen`"}
 }
 
 # * in
@@ -198,12 +139,16 @@ bred_compose_task() {
 
     local usercode=
     local envvars=
-    local namenode=$(hostname)
+    local _namenode=$(hostname)
+    local _hosts="${hosts}"
+    local _bredfs_init=$(bredfs_compose_init '/tmp/bredfs' | base64 -w 0)
+    local _bredfs_write=$(bredfs_compose_write "${_namenode}" '/tmp/bredfs' | base64 -w 0)
+    local _bredfs_read=$(bredfs_compose_read '/tmp/bredfs' "${host_idx:-'-'}" "${_hosts}" | base64 -w 0)
     envvars="BRED_PART_ID=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\""
     envvars="${envvars} BRED_USERCODE='$userfunc'"
-    envvars="${envvars} BREDFS_INIT='$(bredfs_compose_init /tmp/bredfs)'"
-#    envvars="${envvars} BREDFS_WRITE='$(bredfs_compose_write ${namenode} /tmp/bredfs)'"
-    envvars="${envvars} BREDFS_READ='$(bredfs_compose_read /tmp/bredfs 1 "${hosts}")'"
+    envvars="${envvars} BREDFS_INIT='${_bredfs_init}'"
+    envvars="${envvars} BREDFS_WRITE='${_bredfs_write}'"
+    envvars="${envvars} BREDFS_READ='${_bredfs_read}'"
 
     case "$mode" in
         map)
@@ -347,11 +292,11 @@ bred_executetask() {
         # 1) compose 'task' component based on execution mode (map, reduce, or compat)
         bred_compose_task "$mode" "$host_idx" "$nodepath"
         # 2) start the task.
-        ssh "$host" -n \
-            "tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
+        ssh "$host" -n "$(typeset -f bredfs) ; \
+            tail -s0.1 -f --pid=$pid $nodepath/in_$host_idx 2>/dev/null </dev/null \
                     $task \
                     | nc -q0 -l -p $port_in >&/dev/null &"
-
+	
         ####
         # Connect the task to the local forwarder of master side's
         # our local forwarders
@@ -423,5 +368,7 @@ bred_executetask() {
     # this seems to work: /bin/kill -- -$$
 }
 
+. "$(dirname $0)/bred-core"
 bred_parseopt "$@"
 bred_executetask;
+

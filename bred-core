@@ -1,0 +1,106 @@
+####
+# Loads brhosts
+bred_load_brhosts() {
+  if [[ -n "$1" ]]; then
+    echo $@
+  else
+    local _brhostsfile="/etc/br.hosts"
+    [[ -e "$HOME/.br.hosts" ]] && _brhostsfile="$HOME/.br.hosts"
+    echo `cat ${_brhostsfile}`
+  fi
+}
+
+####
+# Composes a string to initialize a file in "poorman's DFS"
+#
+# Parameters:
+# $1: A base directory of the local stroage of poorman's DFS
+bredfs_compose_init() {
+  local _fsbase=${1}
+  local _s='echo "" | bred -r "mkdir -p %s/\${BRED_PART_ID}/$(dirname ${STORE}) ; truncate -s 0 %s/\${BRED_PART_ID}/$(dirname ${STORE})/$(basename ${STORE})" -T "-n" -c 1'
+  printf "${_s}" "${_fsbase}" "${_fsbase}"
+}
+
+####
+# Composes a string to write file to "poorman's DFS"
+#
+# Parameters:
+# $1: A name node address (the host where bred/brp is installed)
+# $2: A base directory of the local stroage of poorman's DFS
+bredfs_compose_write() {
+  # nl -w 1 -b a ~/Documents/FSM.md | bred -r 'cat > /tmp/bredfs/${BRED_WORKER_IDX}/work/FSM.md' -T '-n' -c 1 >& /dev/null
+  local _namenode=(${1})
+  local _fsbase=${2}
+
+  local _f='nl -w 1 -b a -s " " ${APPEND} | ssh -o SendEnv=TO localhost "bred -r '\''cat >> /tmp/bredfs/\${BRED_PART_ID}/${TO}'\'' -T '\''-n'\'' -c '\''1'\''"'
+  printf "${_f}" ${_namenode} ${_fsbase} '${TO}'
+}
+
+####
+# Composes a string to read file from "poorman's DFS"
+# If you are on a host not belonging to br.hosts, use '-' for the second parameter.
+#
+# Parameters:
+# $1: A base directory of the local stroage of poorman's DFS
+# $2: A partition id from which the data is read.
+# $3: A string which lists hosts read from br.hosts file.
+bredfs_compose_read() {
+  local _fsbase=${1}
+  local _partid=${2}
+  local _hosts=(${3})
+  local _i
+  local _s=''
+  _s="sort -m ${ORDER_BY:--k1,1 -n -S32M} "
+  for _i in $(seq 0 $((${#_hosts[@]} - 1))); do
+#    if [ "${_i}" == "${_partid}" ]; then
+#      _s="${_s} <(sh -c \""
+#    else
+      _s="${_s} <(ssh ${_hosts[${_i}]} \""
+#    fi
+    _s="${_s} cat ${_fsbase}/${_i}/"
+    _s="${_s}"'${FROM:?FROM is mandatory}  | ${WHERE:-cat} | sort ${ORDER_BY:--k1,1 -n -S32M}'
+    _s="${_s} \") "
+  done
+  _s="${_s}"'| sh -c "${SELECT:-cut -f 2- -d \ }"'
+  echo "${_s}"
+}
+
+####
+# Exports BREDFS environment variables
+bredfs_exportenv() {
+  local _host_idx="${1:-}"
+  local _hosts=$(bred_load_brhosts $2)
+  local _namenode="${_hosts[0]}"
+  export BREDFS_INIT=$(bredfs_compose_init '/tmp/bredfs' | base64 -w 0)
+  export BREDFS_WRITE=$(bredfs_compose_write "${_namenode}" '/tmp/bredfs' | base64 -w 0)
+  export BREDFS_READ=$(bredfs_compose_read '/tmp/bredfs' "${_host_idx:-'-'}" "${_hosts}" | base64 -w 0)
+}
+
+####
+# Executes a bredfs sub command.
+#
+# Parameters:
+# $1: A sub command name
+#
+# Environment variables:
+# BREDFS_INIT: $(bredfs_compose_init '/tmp/bredfs' | base64 -w 0)
+# BREDFS_WRITE: $(bredfs_compose_write "${_namenode}" '/tmp/bredfs' | base64 -w 0)
+# BREDFS_READ: $(bredfs_compose_read '/tmp/bredfs' "${host_idx:-'-'}" "${_hosts}" | base64 -w 0)
+# STORE:
+# APPEND:
+# TO:
+# SELECT:
+# FROM:
+# WHERE:
+# ORDER_BY:
+bredfs() {
+  local _func
+  case "${1:?Operation must be specified. Do 'help' for list}" in
+    "init")   _func=$(echo -n ${BREDFS_INIT} | base64 -d);;
+    "write")  _func=$(echo -n ${BREDFS_WRITE} | base64 -d);;
+    "read")   _func=$(echo -n ${BREDFS_READ} | base64 -d);;
+    "help")   _func='echo "init, write, read, or help can be used. reserved environment variables are following: SELECT=${SELECT} FROM=${FROM} WHERE=${WHERE} APPEND=${APPEND} TO=${TO} STORE=${STORE}"';;
+    *)        exit 1;;
+  esac
+  eval ${_func}
+}

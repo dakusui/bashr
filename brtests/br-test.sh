@@ -321,6 +321,122 @@ function bredtest_compat_wordcount_with_2reducers() {
     fi
 }
 
+function _setup_bredfs() {
+  local _hosts="localhost localhost"
+  local _namenode="localhost"
+  local _host_idx="1"
+  BREDFS_INIT=$(bredfs_compose_init '/tmp/bredfs' | base64 -w 0)
+  BREDFS_WRITE=$(bredfs_compose_write "${_namenode}" '/tmp/bredfs' | base64 -w 0)
+  BREDFS_READ=$(bredfs_compose_read '/tmp/bredfs' "${_host_idx:-'-'}" "${_hosts}" | base64 -w 0)
+}
+
+function _format_bredfs() {
+    local _fsbase="/tmp/bredfs"
+    if [ -e "${_fsbase}" ]; then
+      rm -fr "/tmp/bredfs" # Intentionally not to use variable. I don't want to do 'rm -fr' by mistake.
+      mkdir "${_fsbase}"
+    fi
+}
+
+function bredtest_bredfs_init() {
+  if [ $1 == 'expected' ]; then
+    echo '====
+/tmp/bredfs/1/path/to/store
+/tmp/bredfs/3/path/to/store
+/tmp/bredfs/0/path/to/store
+/tmp/bredfs/2/path/to/store'
+  elif [ $1 == 'actual' ]; then
+    . "$(dirname $SUT)/bred-core"
+    _setup_bredfs
+    _format_bredfs
+    find "/tmp/bredfs" -type f 2>/dev/null
+    echo "===="
+    STORE="/path/to/store" bredfs init 2>/dev/null
+    find "/tmp/bredfs" -type f 2>/dev/null
+  else
+    echo "Invalid mode $1 is specified"
+    exit 1
+  fi
+}
+
+function bredtest_bredfs_write() {
+  if [ $1 == 'expected' ]; then
+    echo '==INIT==
+/tmp/bredfs/1/path/to/store
+/tmp/bredfs/3/path/to/store
+/tmp/bredfs/0/path/to/store
+/tmp/bredfs/2/path/to/store
+==WRITE==
+/tmp/bredfs/1/path/to/store
+2 B HELLO
+/tmp/bredfs/3/path/to/store
+4 B WORLD
+/tmp/bredfs/0/path/to/store
+3 A WORLD
+/tmp/bredfs/2/path/to/store
+1 A HELLO'
+  elif [ $1 == 'actual' ]; then
+    local _tmp=$(mktemp)
+    . "$(dirname $SUT)/bred-core"
+    _setup_bredfs
+    _format_bredfs
+    echo 'A HELLO
+B HELLO
+A WORLD
+B WORLD' > "${_tmp}"
+    find "/tmp/bredfs" -type f 2>/dev/null
+    echo "==INIT=="
+    STORE="/path/to/store" bredfs init 2>/dev/null
+    find "/tmp/bredfs" -type f 2>/dev/null
+    echo "==WRITE=="
+    APPEND="${_tmp}" TO="/path/to/store" bredfs write 2>/dev/null
+    find "/tmp/bredfs" -type f -exec sh -c 'echo {} && cat {}' \; 2>/dev/null
+  else
+    echo "Invalid mode $1 is specified"
+    exit 1
+  fi
+}
+
+function bredtest_bredfs_read() {
+  if [ $1 == 'expected' ]; then
+    echo '==INIT==
+/tmp/bredfs/1/path/to/store
+/tmp/bredfs/3/path/to/store
+/tmp/bredfs/0/path/to/store
+/tmp/bredfs/2/path/to/store
+==WRITE==
+/tmp/bredfs/1/path/to/store
+2 B HELLO
+/tmp/bredfs/3/path/to/store
+4 B WORLD
+/tmp/bredfs/0/path/to/store
+3 A WORLD
+/tmp/bredfs/2/path/to/store
+1 A HELLO'
+  elif [ $1 == 'actual' ]; then
+    local _tmp=$(mktemp)
+    . "$(dirname $SUT)/bred-core"
+    _setup_bredfs
+    _format_bredfs
+    echo 'A HELLO
+B HELLO
+A WORLD
+B WORLD' > "${_tmp}"
+    find "/tmp/bredfs" -type f 2>/dev/null
+    echo "==INIT=="
+    STORE="/path/to/store" bredfs init 2>/dev/null
+    find "/tmp/bredfs" -type f 2>/dev/null
+    echo "==WRITE=="
+    APPEND="${_tmp}" TO="/path/to/store" bredfs write 2>/dev/null
+    find "/tmp/bredfs" -type f -exec sh -c 'echo {} && cat {}' \; 2>/dev/null
+    echo "==READ=="
+    FROM="/path/to/store" WHERE="grep -E 'A|HELLO'" bredfs read 2>/dev/null
+  else
+    echo "Invalid mode $1 is specified"
+    exit 1
+  fi
+}
+
 DIRNAME=$(dirname $(dirname $0))
 SUT="$DIRNAME/bred"
 NUM_TOTAL=0

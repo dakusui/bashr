@@ -1,29 +1,17 @@
-# BREDFS_WRITE="nl -w 1 -b a | ssh [namenode] bred -r 'cat > [_fsbase]/${BRED_WORKER_IDX}/[/path/to/file]' -T '-n' -c 1 >& /dev/null"
-# local num_hosts=$(($(echo "$hosts" | wc -w)))
-# echo ${#hosts[@]} # numhosts
-# BREDFS_READ='sort -m ${ORDER_BY:--k1,1}
-#     <(ssh localhost "cat /home/hiroshi/Documents/IdeaProjects/bred/deprecated/tmp/0/${FROM:?FROM is mandatory} ${WHERE:+|$WHERE} ${SELECT:+|$SELECT} ${ORDER_BY:+|sort $ORDER_BY}") 
-#     <(sh -c         "cat /home/hiroshi/Documents/IdeaProjects/bred/deprecated/tmp/1/${FROM:?FROM is mandatory} ${WHERE:+|$WHERE} ${SELECT:+|$SELECT} ${ORDER_BY:+|sort $ORDER_BY}") 
-#     <(ssh localhost "cat /home/hiroshi/Documents/IdeaProjects/bred/deprecated/tmp/2/${FROM:?FROM is mandatory} ${WHERE:+|$WHERE} ${SELECT:+|$SELECT} ${ORDER_BY:+|sort $ORDER_BY}") 
-#     <(ssh localhost "cat /home/hiroshi/Documents/IdeaProjects/bred/deprecated/tmp/3/${FROM:?FROM is mandatory} ${WHERE:+|$WHERE} ${SELECT:+|$SELECT} ${ORDER_BY:+|sort $ORDER_BY}")'
+bredfs_compose_init() {
+  local _fsbase=${1}
+  local _s='echo "" | bred -r "mkdir -p %s/\${BRED_PART_ID}/$(dirname ${STORE}) ; truncate -s 0 %s/\${BRED_PART_ID}/$(dirname ${STORE})/$(basename ${STORE})" -T "-n" -c 1'
+  printf "${_s}" "${_fsbase}" "${_fsbase}"
+}
 
-# # bredfs -cat --part=1 --from=0 seqnum-demo.txt
-# ssh namenode "bredfs -cat --part=1 --from=0 --print-only /seqnum-demo.txt"
-# ->ssh {host-1} "cat /tmp/bredfs/0/seqnum-demo.txt"
+bredfs_compose_write() {
+  # nl -w 1 -b a ~/Documents/FSM.md | bred -r 'cat > /tmp/bredfs/${BRED_WORKER_IDX}/work/FSM.md' -T '-n' -c 1 >& /dev/null
+  local _namenode=(${1})
+  local _fsbase=${2}
 
-# # bredfs -cat --part=0 --from=0 seqnum-demo.txt
-# ssh namenode "bredfs -cat --part=0 --from=0 --print-only /seqnum-demo.txt"
-# ->cat /tmp/bredfs/0/seqnum-demo
-
-# # bredfs -cat --part=- --from=0 seqnum-demo.txt
-# ssh namenode "bredfs -cat --part=- --from=0 --print-only /seqnum-demo.txt"
-# ->sort -m <(ssh {host-0} "/tmp/bredfs/0/seqnum-demo") <(ssh {host-1} "/tmp/bredfs/1/seqnum-demo") ...
-
-
-# for part-1
-# BREDFS_CAT='sort -m <(ssh {host-0} "/tmp/bredfs/0/${P:?P must be set}" ${F:+| $F}) <(cat /tmp/bredfs/1/${P}" ${F:+| $F}) ... <(ssh {host-0} "/tmp/bredfs/{n}/${P}" ${F:+| $F})'
-
-# P=/seqnum-demo.txt F="awk '{ print $0 if $1==ENVIRON[BRED_PART_ID]; }'" eval BREDFS_CAT /seqnum-demo
+  local _f='nl -w 1 -b a -s " " ${APPEND} | ssh -o SendEnv=TO localhost "bred -r '\''cat >> /tmp/bredfs/\${BRED_PART_ID}/${TO}'\'' -T '\''-n'\'' -c '\''1'\''"'
+  printf "${_f}" ${_namenode} ${_fsbase} '${TO}'
+}
 
 
 ####
@@ -39,7 +27,8 @@ bredfs_compose_read() {
   local _partid=${2}
   local _hosts=(${3})
   local _i
-  local _s="sort -m ${ORDER_BY:--k1,1} "
+  local _s=''
+  _s="sort -m ${ORDER_BY:--k1,1 -n -S32M} "
   for _i in $(seq 0 $((${#_hosts[@]} - 1))); do
     if [ "${_i}" == "${_partid}" ]; then
       _s="${_s} <(sh -c \""
@@ -47,50 +36,57 @@ bredfs_compose_read() {
       _s="${_s} <(ssh ${_hosts[${_i}]} \""
     fi
     _s="${_s} cat ${_fsbase}/${_i}/"
-    _s="${_s}"'${FROM:?FROM is mandatory} ${WHERE:+|$WHERE} ${ORDER_BY:+|sort $ORDER_BY} ${SELECT:+|$SELECT}'
+    _s="${_s}"'${FROM:?FROM is mandatory} | sort ${ORDER_BY:--k1,1 -n -S32M} ${WHERE:+|$WHERE}'
     _s="${_s} \") "
   done
+  _s="${_s}"'| sh -c "${SELECT:-cut -f 2- -d \ }"'
   echo "${_s}"
 }
 
-bredfs_compose_init() {
-  local _fsbase=${1}
-  local _s='echo "" | bred -r "mkdir -p %s/\${BRED_PART_ID}/$(dirname ${STORE_NAME}) ; truncate -s 0 %s/\${BRED_PART_ID}/$(dirname ${STORE_NAME})/$(basename ${STORE_NAME})" -T "-n" -c 1'
-  printf "${_s}" "${_fsbase}" "${_fsbase}"
+bredfs() {
+  local _func
+  case "${1:?Operation must be specified. Do 'help' for list}" in
+    "init")   _func=$(echo -n ${BREDFS_INIT} | base64 -d);;
+    "write")  _func=$(echo -n ${BREDFS_WRITE} | base64 -d);;
+    "read")   _func=$(echo -n ${BREDFS_READ} | base64 -d);;
+    "help")   _func='echo "init, write, read, or help can be used. reserved environment variables are following: SELECT=${SELECT} FROM=${FROM} WHERE=${WHERE} APPEND=${APPEND} TO=${TO}"';;
+    *)        exit 1;;
+  esac
+  eval ${_func}
 }
 
-bredfs_compose_write() {
-  # nl -w 1 -b a ~/Documents/FSM.md | bred -r 'cat > /tmp/bredfs/${BRED_WORKER_IDX}/work/FSM.md' -T '-n' -c 1 >& /dev/null
-  local _namenode=(${1})
-  local _fsbase=${2}
+test2() {
+  local _hosts=`cat "/home/hiroshi/.br.hosts"`
+  local _namenode="localhost"
 
-#  local _f='nl -w 1 -b a ${APPEND} | ssh -o SendEnv=TO localhost "bred -r '\''cat >> /tmp/bredfs/\${BRED_PART_ID}/${TO}'\'' -T '\''-n'\'' -c '\''1'\''"'
-  local _f='nl -w 1 -b a ${APPEND} | ssh -o SendEnv=TO localhost "bred -r '\'\\\'\''cat >> /tmp/bredfs/\${BRED_PART_ID}/${TO}'\'\\\'\'' -T '\'\\\'\''-n'\'' -c '\'\\\'\''1'\'\\\'\''"'
-  printf "${_f}" ${_namenode} ${_fsbase} '${TO}'
+  BREDFS_INIT=$(bredfs_compose_init '/tmp/bredfs' | base64 -w 0)
+  BREDFS_WRITE=$(bredfs_compose_write "${_namenode}" '/tmp/bredfs' | base64 -w 0)
+  BREDFS_READ=$(bredfs_compose_read '/tmp/bredfs' "${BRED_PART_ID:-'-'}" "${_hosts}" | base64 -w 0)
+  STORE="/path/to/store" bredfs init
+  APPEND="$0" TO="/path/to/store" bredfs write
+  ## WORKED
+  SELECT='cut -f 1- -d " "' FROM='/path/to/store' ORDER_BY='-k 1,1 -n -S1G' bredfs read
+  ## WORKED
+  SELECT='cut -f 1- -d \ ' FROM='/path/to/store' ORDER_BY='-k 1,1 -n -S1G' bredfs read
+  ## WORKED
+  FROM='/path/to/store' ORDER_BY='-k 1,1 -n -S1G' bredfs read
+  ## WORKED
+  SELECT="cut -f 1- -d ' ' " FROM='/path/to/store' ORDER_BY='-k 1,1 -n -S1G' bredfs read
+  ## WORKED
+  SELECT='sed -e "s/\ /@/g"' FROM='/path/to/store' ORDER_BY='-k 1,1 -n -S1G' bredfs read
 }
 
-hosts=`cat "/home/hiroshi/.br.hosts"`
-envvars="BREDFS_INIT='$(bredfs_compose_init /tmp/bredfs)'"
-envvars="${envvars} BREDFS_WRITE='$(bredfs_compose_write localhost /tmp/bredfs)'"
-#envvars="${envvars} BREDFS_READ=\"$(bredfs_compose_read /tmp/bredfs 1 \"${hosts}\")"
+test1() {
+  local _hosts=`cat "/home/hiroshi/.br.hosts"`
+  
+  STORE="/path/to/store" eval $(bredfs_compose_init "/tmp/bredfs")
+  APPEND="$0" TO="/path/to/store" eval $(bredfs_compose_write localhost "/tmp/bredfs") 
+  FROM='/path/to/store' ORDER_BY='-k 1,1 -n -S1G' eval $(bredfs_compose_read "/tmp/bredfs" "-" "${_hosts}")
+  SELECT='cut -f 1- -d " "' FROM='/path/to/store' ORDER_BY='-k 1,1 -n -S1G' eval $(bredfs_compose_read "/tmp/bredfs" "-" "${_hosts}")
+}
 
 
-#Initializing
-#echo ${BREDFS_INIT}
-echo "---INIT---"
-echo "   ${BREDFS_INIT}"
-echo "   ${envvars}"
-usercode='STORE_NAME="/path/to/store" eval ${BREDFS_INIT}'
-task="${envvars} sh -c '${usercode}'"
-echo sh -c "${task}"
-sh -c "${task}"
-exit $?
-#Writing
-echo "---WRITE---"
-echo "   ${BREDFS_WRITE}"
-APPEND='README.md' TO='/path/to/store' eval "${BREDFS_WRITE}" ${TO}
-#Reading
-echo "---READ---"
-echo "   ${BREDFS_READ}"
-SELECT='cat -n' FROM='/path/to/store' WHERE='grep -E "1|2"' ORDER_BY="-k 1,1 -r" eval "${BREDFS_READ}"
+
+typeset -f quote
+test2
 
