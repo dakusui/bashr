@@ -322,12 +322,7 @@ function bredtest_compat_wordcount_with_2reducers() {
 }
 
 function _setup_bredfs() {
-  local _hosts="localhost localhost"
-  local _namenode="localhost"
-  local _host_idx="1"
-  BREDFS_INIT=$(bredfs_compose_init '/tmp/bredfs' | base64 -w 0)
-  BREDFS_WRITE=$(bredfs_compose_write "${_namenode}" '/tmp/bredfs' | base64 -w 0)
-  BREDFS_READ=$(bredfs_compose_read '/tmp/bredfs' "${_host_idx:-'-'}" "${_hosts}" | base64 -w 0)
+  bredfs_exportenv "-" "localhost localhost localhost localhost"
 }
 
 function _format_bredfs() {
@@ -341,10 +336,10 @@ function _format_bredfs() {
 function bredtest_bredfs_init() {
   if [ $1 == 'expected' ]; then
     echo '====
-/tmp/bredfs/1/path/to/store
-/tmp/bredfs/3/path/to/store
 /tmp/bredfs/0/path/to/store
-/tmp/bredfs/2/path/to/store'
+/tmp/bredfs/1/path/to/store
+/tmp/bredfs/2/path/to/store
+/tmp/bredfs/3/path/to/store'
   elif [ $1 == 'actual' ]; then
     . "$(dirname $SUT)/bred-core"
     _setup_bredfs
@@ -352,7 +347,7 @@ function bredtest_bredfs_init() {
     find "/tmp/bredfs" -type f 2>/dev/null
     echo "===="
     STORE="/path/to/store" bredfs init 2>/dev/null
-    find "/tmp/bredfs" -type f 2>/dev/null
+    find "/tmp/bredfs" -type f | sort 2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -362,19 +357,15 @@ function bredtest_bredfs_init() {
 function bredtest_bredfs_write() {
   if [ $1 == 'expected' ]; then
     echo '==INIT==
-/tmp/bredfs/1/path/to/store
-/tmp/bredfs/3/path/to/store
 /tmp/bredfs/0/path/to/store
+/tmp/bredfs/1/path/to/store
 /tmp/bredfs/2/path/to/store
+/tmp/bredfs/3/path/to/store
 ==WRITE==
-/tmp/bredfs/1/path/to/store
-2 B HELLO
-/tmp/bredfs/3/path/to/store
-4 B WORLD
-/tmp/bredfs/0/path/to/store
-3 A WORLD
-/tmp/bredfs/2/path/to/store
-1 A HELLO'
+/tmp/bredfs/0/path/to/store:3 A WORLD
+/tmp/bredfs/1/path/to/store:2 B HELLO
+/tmp/bredfs/2/path/to/store:1 A HELLO
+/tmp/bredfs/3/path/to/store:4 B WORLD'
   elif [ $1 == 'actual' ]; then
     local _tmp=$(mktemp)
     . "$(dirname $SUT)/bred-core"
@@ -384,13 +375,13 @@ function bredtest_bredfs_write() {
 B HELLO
 A WORLD
 B WORLD' > "${_tmp}"
-    find "/tmp/bredfs" -type f 2>/dev/null
+    find "/tmp/bredfs" -type f | sort 2>/dev/null
     echo "==INIT=="
     STORE="/path/to/store" bredfs init 2>/dev/null
-    find "/tmp/bredfs" -type f 2>/dev/null
+    find "/tmp/bredfs" -type f | sort 2>/dev/null
     echo "==WRITE=="
     APPEND="${_tmp}" TO="/path/to/store" bredfs write 2>/dev/null
-    find "/tmp/bredfs" -type f -exec sh -c 'echo {} && cat {}' \; 2>/dev/null
+    find "/tmp/bredfs" -type f -exec sh -c 'echo -n {}":" && cat {}' \; | sort 2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -400,19 +391,19 @@ B WORLD' > "${_tmp}"
 function bredtest_bredfs_read() {
   if [ $1 == 'expected' ]; then
     echo '==INIT==
-/tmp/bredfs/1/path/to/store
-/tmp/bredfs/3/path/to/store
 /tmp/bredfs/0/path/to/store
+/tmp/bredfs/1/path/to/store
 /tmp/bredfs/2/path/to/store
+/tmp/bredfs/3/path/to/store
 ==WRITE==
-/tmp/bredfs/1/path/to/store
-2 B HELLO
-/tmp/bredfs/3/path/to/store
-4 B WORLD
-/tmp/bredfs/0/path/to/store
-3 A WORLD
-/tmp/bredfs/2/path/to/store
-1 A HELLO'
+/tmp/bredfs/0/path/to/store:3 A WORLD
+/tmp/bredfs/1/path/to/store:2 B HELLO
+/tmp/bredfs/2/path/to/store:1 A HELLO
+/tmp/bredfs/3/path/to/store:4 B WORLD
+==READ==
+A HELLO
+A WORLD
+B HELLO'
   elif [ $1 == 'actual' ]; then
     local _tmp=$(mktemp)
     . "$(dirname $SUT)/bred-core"
@@ -422,15 +413,18 @@ function bredtest_bredfs_read() {
 B HELLO
 A WORLD
 B WORLD' > "${_tmp}"
-    find "/tmp/bredfs" -type f 2>/dev/null
+    find "/tmp/bredfs" -type f | sort 2>/dev/null
     echo "==INIT=="
+    # sort the output since the order doesn't matter
     STORE="/path/to/store" bredfs init 2>/dev/null
-    find "/tmp/bredfs" -type f 2>/dev/null
+    find "/tmp/bredfs" -type f | sort 2>/dev/null
     echo "==WRITE=="
+    # sort the output since the order doesn't matter
     APPEND="${_tmp}" TO="/path/to/store" bredfs write 2>/dev/null
-    find "/tmp/bredfs" -type f -exec sh -c 'echo {} && cat {}' \; 2>/dev/null
+    find "/tmp/bredfs" -type f -exec sh -c 'echo -n {}":" && cat {}' \; | sort 2>/dev/null
     echo "==READ=="
-    FROM="/path/to/store" WHERE="grep -E 'A|HELLO'" bredfs read 2>/dev/null
+    # sort the output since the order doesn't matter
+    FROM="/path/to/store" WHERE="grep -E 'A|HELLO'" bredfs read | sort 2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
