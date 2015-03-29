@@ -1,4 +1,26 @@
 ####
+# Writes a string to stderr
+msg() {
+  echo "${prog}: ${1}" >&2
+}
+
+####
+# Writes a string to stderr and exit qith status code 1
+quit() {
+  msg "${1}"
+  exit 1
+}
+
+####
+# Reads stdin and forward it to stdout.
+read_stdin() {
+  while IFS="" read -r _line
+  do
+    echo "${_line}"
+  done
+}
+
+####
 # Loads brhosts
 bred_load_brhosts() {
   if [[ -n "$1" ]]; then
@@ -14,7 +36,7 @@ bred_load_brhosts() {
 # Composes a string to initialize a file in "poorman's DFS"
 #
 # Parameters:
-# $1: A base directory of the local stroage of poorman's DFS
+# - $1: A base directory of the local stroage of poorman's DFS
 bredfs_compose_init() {
   local _fsbase=${1}
   local _s='echo "" | bred -r "mkdir -p %s/\${BRED_PART_ID}/$(dirname ${STORE}) ; truncate -s 0 %s/\${BRED_PART_ID}/$(dirname ${STORE})/$(basename ${STORE})" -T "-n" -c 1'
@@ -25,8 +47,8 @@ bredfs_compose_init() {
 # Composes a string to write file to "poorman's DFS"
 #
 # Parameters:
-# $1: A name node address (the host where bred/brp is installed)
-# $2: A base directory of the local stroage of poorman's DFS
+# - $1: A name node address (the host where bred/brp is installed)
+# - $2: A base directory of the local stroage of poorman's DFS
 bredfs_compose_write() {
   # nl -w 1 -b a ~/Documents/FSM.md | bred -r 'cat > /tmp/bredfs/${BRED_WORKER_IDX}/work/FSM.md' -T '-n' -c 1 >& /dev/null
   local _namenode=(${1})
@@ -41,9 +63,9 @@ bredfs_compose_write() {
 # If you are on a host not belonging to br.hosts, use '-' for the second parameter.
 #
 # Parameters:
-# $1: A base directory of the local stroage of poorman's DFS
-# $2: A partition id from which the data is read.
-# $3: A string which lists hosts read from br.hosts file.
+# - $1: A base directory of the local stroage of poorman's DFS
+# - $2: A partition id from which the data is read.
+# - $3: A string which lists hosts read from br.hosts file.
 bredfs_compose_read() {
   local _fsbase=${1}
   local _partid=${2}
@@ -77,19 +99,19 @@ bredfs_exportenv() {
 # Executes a bredfs sub command.
 #
 # Parameters:
-# $1: A sub command name
+# - $1: A sub command name
 #
 # Environment variables:
-# BREDFS_INIT: $(bredfs_compose_init '/tmp/bredfs' | base64 -w 0)
-# BREDFS_WRITE: $(bredfs_compose_write "${_namenode}" '/tmp/bredfs' | base64 -w 0)
-# BREDFS_READ: $(bredfs_compose_read '/tmp/bredfs' "${host_idx:-'-'}" "${_hosts}" | base64 -w 0)
-# STORE:
-# APPEND:
-# TO:
-# SELECT:
-# FROM:
-# WHERE:
-# ORDER_BY:
+# - BREDFS_INIT: $(bredfs_compose_init '/tmp/bredfs' | base64 -w 0)
+# - BREDFS_WRITE: $(bredfs_compose_write "${_namenode}" '/tmp/bredfs' | base64 -w 0)
+# - BREDFS_READ: $(bredfs_compose_read '/tmp/bredfs' "${host_idx:-'-'}" "${_hosts}" | base64 -w 0)
+# - STORE:
+# - APPEND:
+# - TO:
+# - SELECT:
+# - FROM:
+# - WHERE:
+# - ORDER_BY:
 bredfs() {
   local _func
   case "${1:?Operation must be specified. Do 'help' for list}" in

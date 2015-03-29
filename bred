@@ -53,6 +53,36 @@ showhelp() {
   exit 2
 } 
 
+####
+# Writes a debug message
+debug() {
+  if [ "${BRED_DEBUG:-off}" == "on" ]; then
+    echo "${prog}: DEBUG: ${1}" >&2
+  fi
+}
+
+####
+# Generates job index
+# Return:
+# - -1: Failed to generate job index.
+# - 0, 1, ...: Valid job id
+bred_gen_job_idx() {
+  local _job_idx=
+  for i in $(seq 1 3); do
+    # Sleep randomized milliseconds to increase probability not to hit
+    # race condition.
+    sleep $(printf '0.0%s' $RANDOM)
+    _job_idx="$(_nextid=$(echo $(($(ls ${_jid_dir}| sort -n -r  | head --lines=1) + 1))) \
+           && mkdir ${_jid_dir}/${_nextid} && echo ${_nextid})" 2>&1
+    debug "try: $i: $_job_idx"
+    if [[ -n "${_job_idx}" ]]; then
+      echo ${_job_idx}
+      return 0
+    fi
+  done
+  echo -1
+  return 1
+}
 
 # int
 #   
@@ -64,7 +94,7 @@ showhelp() {
 bred_parseopt() {
   LC_ALL=${LC_ALL:-""}
   base_port=8192
-  job_idx=0
+  job_idx=-1
   mode='compat'
   interpreter='bash -c'
   hosts=
@@ -104,12 +134,12 @@ bred_parseopt() {
   # job_idx
   local _nextid=-1
   local _jid_dir="${tmp_dir}/jm"
-  job_idx="$(_nextid=$(echo $(($(ls ${_jid_dir}| sort -n -r  | head --lines=1) + 1))) \
-           && mkdir -p ${_jid_dir}/${_nextid} && echo ${_nextid} || echo -1)"
-  if [[ "${job_idx}" == "" ]]; then
-    echo "${job_idx:?Failed to get job id. : ${_jid_dir}}" 1>&2
+  mkdir -p "${_jid_dir}"
+  job_idx=$(bred_gen_job_idx)
+  if [[ "${job_idx}" == -1 ]]; then
+    quit "Failed to get job id. : ${_jid_dir}"
   fi
-  echo "retrieved job id: ${job_idx:?Failed to get job id. }: ${_jid_dir}" 1>&2
+  debug "retrieved job id: ${job_idx:?Failed to get job id. }: ${_jid_dir}"
   echo "$$" > "${_jid_dir}/${job_idx}/pid"
 
   hosts=$(bred_load_brhosts "$hosts")
@@ -287,16 +317,22 @@ bred_executetask() {
   # now, for each host, set up in and out fifos (and a netcat for each), and ssh to each host to set up workers listening on netcat
   mkdir -p "${jobpath}/"{in,out}
   for host in ${hosts}; do
+    debug "bred: bred_executetask: BEGIN: for"
     ####
     # set up communication path
     # 1) master side
     #    our named pipes
     mkfifo "${jobpath}/"{in,out}"/${host_idx}"
+    if [[ "$?" != 0 ]]; then
+      echo "FAIL!!!" 2>&1
+      exit 1
+    fi
     # 2) slave side
     ssh -n "$host" "mkdir -p ${nodepath}/${host_idx}"
     #    let's start the remote 'nc' listener and get the pid of it
     local pid=$(ssh -n "$host" "nc -l -p $port_out >${nodepath}/${host_idx}/in 2>/dev/null </dev/null & jobs -l" | awk {'print $2'})
     
+    debug "bred: bred_executetask: INFO: for (1): ${jobpath}, ${nodepath}"
     ####
     # start task process on remote side and connect to it to the listener
     # 1) compose 'task' component based on execution mode (map, reduce, or compat)
@@ -310,14 +346,17 @@ bred_executetask() {
     ####
     # Connect the task to the local forwarder of master side's
     # our local forwarders
+    debug "bred: bred_executetask: INFO: for (2)"
     nc "${host}" "${port_in}" >"${jobpath}/in/${host_idx}" &
     nc -q0 "${host}" "${port_out}" <"${jobpath}/out/${host_idx}" &
     # our vars
+    debug "bred: bred_executetask: INFO: for (3)"
     out_files="$out_files $jobpath/out/$host_idx"
     in_files="$in_files $jobpath/in/$host_idx"
     port_in=$(($port_in + 2))
     port_out=$(($port_in + 1))
     host_idx=$(($host_idx + 1))
+    debug "bred: bred_executetask: END: for: ${host_idx}"
   done
   
   ####    
@@ -368,20 +407,22 @@ bred_executetask() {
   
   ####    
   # finally, clean up after ourselves
-  if [[ -e "jjjj" ]]; then
-    rm -rf "${jobpath:?something goes wrong!}"
-    for host in ${hosts}; do
-      ssh "$host" "rm -fr ${nodepath:?'node path isn't set''}"
-    done
-    rm -fr "${tmp_dir:?something goes wrong!}/jm/${job_idx:?something goes wrong!}"
-  fi
+  rm -rf "${jobpath:?something goes wrong!}"
+  for host in ${hosts}; do
+    ssh "$host" "rm -fr ${nodepath:?'node path isn't set''}"
+  done
+  rm -fr "${tmp_dir:?something goes wrong!}/jm/${job_idx:?something goes wrong!}"
   
   ####    
   # TODO: is there a safe way to kill subprocesses upon fail?
   # this seems to work: /bin/kill -- -$$
 }
 
-. "$(dirname $0)/bred-core"
-bred_parseopt "$@"
-bred_executetask;
+main() {
+  . "$(dirname $0)/bred-core"
+  prog="`basename $0`"
+  bred_parseopt "$@"
+  bred_executetask;
+}
 
+main "$@"

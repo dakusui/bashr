@@ -32,41 +32,6 @@ debug() {
 }
 
 ####
-# Writes a string to stderr
-msg() {
-  echo "${prog}: ${1}" >&2
-}
-
-####
-# Writes a string to stderr and exit qith status code 1
-quit() {
-  msg "${1}"
-  exit 1
-}
-
-####
-# Reads stdin and forward it to stdout.
-read_stdin() {
-  while IFS="" read -r _line
-  do
-    echo "${_line}"
-  done
-}
-
-# WARNING: (t.b.d.) unfortunately, this function isn't safe enough since xbred forks background jobs
-#          but race condition is not considered.
-current_tasknum() {
-  cat "${bred_current_tasknum}"
-}
-
-# WARNING: (t.b.d.) unfortunately, this function isn't safe enough since xbred forks background jobs
-#          but race condition is not considered.
-increment_tasknum() {
-  local _cur=$(current_tasknum)
-  echo -n $((${_cur} + 1)) > "${bred_current_tasknum}"
-}
-
-####
 # Prints the content of taskdef file specified by $2.
 # The taskdef should look like '{arg1};{arg2};...;{argn}:{taskdeffile}'
 # And each arg looks like 'ENV_VAR=value'.
@@ -121,7 +86,6 @@ read_task() {
 }
 
 read_xbred_file() {
-  local _tasknum=0
   local _id _type _sinks _key _interpreter _task
   firsttask=""
   while read -r _id _type _sinks _key _interpreter _task
@@ -135,7 +99,7 @@ read_xbred_file() {
     if [ ${tasktype[${_id}]+_} ]; then
       quit "line ${LINENO}: The key ${_id} is defined more than once"
     fi
-    if [ ${_tasknum} == 0 ]; then
+    if [ "${firsttask}" == "" ]; then
       firsttask=${_id}
     fi
     tasktype[${_id}]=${_type}
@@ -144,7 +108,6 @@ read_xbred_file() {
     interpreter[${_id}]=${_interpreter//\;/ }
     task[${_id}]=${_task}
     connected[${_id}]=""
-    _tasknum=$((${_tasknum} + 1))
   done <"$1"
   if [ -z "${firsttask}" ]; then
     quit "line ${LINENO}: No task was found."  >&2
@@ -293,12 +256,11 @@ compose_single_task() {
   elif [[ "${_tasktype}" == "R" ]]; then
     _cmd="bred -e ${_logfile}  -c \"$(currentkey ${1})\" ${_sort_on_out} -M reduce -I \"${interpreter[${1}]}\" -r ${task[${1}]}"
   elif [[ "${_tasktype}" == "L" ]]; then
-    _cmd="XBRED_START_TASKNUM=$((${start_tasknum} + ${numtasks})) ${interpreter[${1}]} ${task[${1}]}"
+    _cmd="${interpreter[${1}]} '${task[${1}]}'"
   else
     quit "${prog}: line ${LINENO}: Unknown task type ${_tasktype} was specified."
   fi
   _cmd="BRED_SELF='${xbredfile}' ${_cmd}"
-  increment_tasknum
   echo "${_cmd}"
 }
 
@@ -306,7 +268,6 @@ compose_task() {
   debug "START: compose_task: '$1'"
   local _i
   local _num_sinks=0
-  local _tasknum=$(current_tasknum)
   local _cmd=""
   # count number of sinks for this task
   _num_sinks=$(num_sinks $1)
@@ -314,7 +275,7 @@ compose_task() {
     quit "${prog}: line ${LINENO}: No sink was defined for task ${1}."
   elif [[ "${_num_sinks}" == 1 ]]; then
     local _s="${sinks[${1}]}"
-    debug "INFO: compose_task: output of '$1'(${_tasknum}) is cascaded to a single sink '${sinks[${1}]}'"
+    debug "INFO: compose_task: output of '$1' is cascaded to a single sink '${sinks[${1}]}'"
     if [ "${_s}" == "-" ]; then
       _cmd="$(compose_single_task ${1}) > ${bredout} &"
     else
@@ -324,7 +285,7 @@ compose_task() {
     local _sinks=$(get_sinks "${1}")
     local _tee="tee"
     # $_s for a sink
-    debug "INFO: compose_task: output of '$1' is cascaded to multiple sinks '${_sinks[@]}' : ${_tasknum}"
+    debug "INFO: compose_task: output of '$1' is cascaded to multiple sinks '${_sinks[@]}'"
     for _s in ${_sinks[@]}; do
       debug "INFO: compose_task: ${_s}"
       requires_keyconverter "${1}" "${_s}"
@@ -333,14 +294,12 @@ compose_task() {
       local _subtask=$(compose_task "${_s}")
       if [ "$_ret" == 1 ]; then
 	_keyconverter=$(compose_keyconverter "${1}" "${_s}")
-	increment_tasknum
       fi
       _tee="${_tee} >(${_keyconverter} ${_subtask} > /dev/null)"
     done
-    increment_tasknum
     _cmd="$(compose_single_task ${1}) | ${_tee} > /dev/null"
   fi
-  debug "END: compose_task: '$1' : _tasknum updated ${_tasknum}->$(current_tasknum) : '${_cmd}'"
+  debug "END: compose_task: '$1': '${_cmd}'"
   echo "${_cmd}"
 }
 
@@ -462,7 +421,6 @@ main() {
   prog="`basename $0`"
   parse_opts $@
   bredout="${tmpdir}/xbred-`uuidgen`"
-  bred_current_tasknum="${bredout}.current_tasknum"
   declare -A tasktype
   declare -A sinks
   declare -A key
@@ -480,10 +438,7 @@ main() {
   # file and useit
   firsttask=${bredtask:-${firsttask}}
   numtasks=$(count_tasks_in_xbred_file ${firsttask})
-  start_tasknum=${XBRED_START_TASKNUM:-0}
-  # Initialize the current tasknum
-  echo -n "${start_tasknum}" > "${bred_current_tasknum}"
-  debug "INFO: main: start_tasknum=${start_tasknum} numtasks(effective)=${numtasks}"
+  debug "INFO: main: numtasks(effective)=${numtasks}"
   if [ "$jobmode" == "normal" ]; then  
     # start pipleline
     msg "starting pipeline"
@@ -491,7 +446,6 @@ main() {
     read_stdin | exec_task "${firsttask}" 
     cat "${bredout}"
     rm "${bredout}"
-    rm "${bred_current_tasknum}"
     msg "done"
   elif [ "$jobmode" == "single" ]; then
     read_stdin | exec_single_task "${firsttask}"
@@ -501,5 +455,6 @@ main() {
   debug "END: main"
 }
 
+. "$(dirname $0)/bred-core"
 main $@
 
