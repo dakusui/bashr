@@ -273,7 +273,7 @@ compose_keyconverter() {
   if [[ "${_k2}" == "-" ]]; then
     _k2=1
   fi
-  local _cmd="bred -e ${_logfile} -j ${3} -c ${_k1} -s ${_k2} -M map -I \"sh -c\" -r 'cat'|"
+  local _cmd="bred -e ${_logfile} -c ${_k1} -s ${_k2} -M map -I \"sh -c\" -r 'cat'|"
   debug "END: compose_keyconverter: ${_cmd}"
 }
 
@@ -284,15 +284,14 @@ compose_single_task() {
   local _logfile="${logdir}/task-${1}.log"
   local _tasktype=${tasktype["${1}"]}
   local _cmd=""
-  local _tasknum=$(current_tasknum)
   if [ "${_requires_sort_on_out}" == 1 ]; then
     _sort_on_out="-s \"$(nextkey ${1})\""
   fi
   # value ${task[${1}]} itself is already quoted, so we don't need to quote it in _cmd again.
   if [[ "${_tasktype}" == "M" ]]; then
-    _cmd="bred -e ${_logfile} -c \"$(currentkey ${1})\" ${_sort_on_out} -M map -j \"${_tasknum}\" -I \"${interpreter[${1}]}\" -r ${task[${1}]}"
+    _cmd="bred -e ${_logfile} -c \"$(currentkey ${1})\" ${_sort_on_out} -M map -I \"${interpreter[${1}]}\" -r ${task[${1}]}"
   elif [[ "${_tasktype}" == "R" ]]; then
-    _cmd="bred -e ${_logfile}  -c \"$(currentkey ${1})\" ${_sort_on_out} -M reduce -j \"${_tasknum}\" -I \"${interpreter[${1}]}\" -r ${task[${1}]}"
+    _cmd="bred -e ${_logfile}  -c \"$(currentkey ${1})\" ${_sort_on_out} -M reduce -I \"${interpreter[${1}]}\" -r ${task[${1}]}"
   elif [[ "${_tasktype}" == "L" ]]; then
     _cmd="XBRED_START_TASKNUM=$((${start_tasknum} + ${numtasks})) ${interpreter[${1}]} ${task[${1}]}"
   else
@@ -405,12 +404,12 @@ validate_xbred_file() {
 ####
 # Validates global variables set by user options.
 validate_opts() {
-  
   # bredtask=""
   # jobmode="normal"
   # logdir="$(pwd)"
   # tmpdir="/tmp"
   # xbredfile=$(readlink -e "${1}")
+  :
 }
 
 ####

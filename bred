@@ -84,7 +84,6 @@ bred_parseopt() {
     case "$name" in
       m)  hosts=$OPTARG;;
       p)  baseport=$OPTARG;;
-      j)  job_idx=$OPTARG;; # Will be ignored.
       M)  mode=$OPTARG;;
       I)  interpreter=$OPTARG;;
       c)  mapcolumn=$OPTARG;;
@@ -103,10 +102,14 @@ bred_parseopt() {
     esac
   done
   # job_idx
-  local _nextid
+  local _nextid=-1
   local _jid_dir="${tmp_dir}/jm"
   job_idx="$(_nextid=$(echo $(($(ls ${_jid_dir}| sort -n -r  | head --lines=1) + 1))) \
-           && mkdir ${_jid_dir}/${_nextid} && echo ${_nextid} || echo -1)"
+           && mkdir -p ${_jid_dir}/${_nextid} && echo ${_nextid} || echo -1)"
+  if [[ "${job_idx}" == "" ]]; then
+    echo "${job_idx:?Failed to get job id. : ${_jid_dir}}" 1>&2
+  fi
+  echo "retrieved job id: ${job_idx:?Failed to get job id. }: ${_jid_dir}" 1>&2
   echo "$$" > "${_jid_dir}/${job_idx}/pid"
 
   hosts=$(bred_load_brhosts "$hosts")
@@ -282,14 +285,14 @@ bred_executetask() {
   local in_files=
   
   # now, for each host, set up in and out fifos (and a netcat for each), and ssh to each host to set up workers listening on netcat
-  mkdir -p ${jobpath}/{in,out}
+  mkdir -p "${jobpath}/"{in,out}
   for host in ${hosts}; do
     ####
     # set up communication path
     # 1) master side
     #    our named pipes
-    mkfifo ${jobpath}/{in,out}/${host_idx}
-    # 2) slave size
+    mkfifo "${jobpath}/"{in,out}"/${host_idx}"
+    # 2) slave side
     ssh -n "$host" "mkdir -p ${nodepath}/${host_idx}"
     #    let's start the remote 'nc' listener and get the pid of it
     local pid=$(ssh -n "$host" "nc -l -p $port_out >${nodepath}/${host_idx}/in 2>/dev/null </dev/null & jobs -l" | awk {'print $2'})
@@ -307,8 +310,8 @@ bred_executetask() {
     ####
     # Connect the task to the local forwarder of master side's
     # our local forwarders
-    nc "$host" "$port_in" >"$jobpath/in/$host_idx" &
-    nc -q0 "$host" "$port_out" <"$jobpath/out/$host_idx" &
+    nc "${host}" "${port_in}" >"${jobpath}/in/${host_idx}" &
+    nc -q0 "${host}" "${port_out}" <"${jobpath}/out/${host_idx}" &
     # our vars
     out_files="$out_files $jobpath/out/$host_idx"
     in_files="$in_files $jobpath/in/$host_idx"
@@ -365,11 +368,13 @@ bred_executetask() {
   
   ####    
   # finally, clean up after ourselves
-  rm -rf "${jobpath:?something goes wrong!}"
-  for host in ${hosts}; do
-    ssh "$host" "rm -fr ${nodepath:?'node path isn't set''}"
-  done
-  rm -fr "${tmp_dir:?something goes wrong!}/jm/${job_idx:?something goes wrong!}"
+  if [[ -e "jjjj" ]]; then
+    rm -rf "${jobpath:?something goes wrong!}"
+    for host in ${hosts}; do
+      ssh "$host" "rm -fr ${nodepath:?'node path isn't set''}"
+    done
+    rm -fr "${tmp_dir:?something goes wrong!}/jm/${job_idx:?something goes wrong!}"
+  fi
   
   ####    
   # TODO: is there a safe way to kill subprocesses upon fail?
