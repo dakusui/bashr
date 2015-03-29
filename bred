@@ -136,8 +136,8 @@ bred_compose_task() {
     # mode: 'map', 'reduce', 'compat'
     local mode=$1
     local host_idx=$2
-    local usercode_errlog="${3}/err-usercode.log"
-    local sorter_errolog="${3}/err-sorter.log"
+    local usercode_errlog="${3}/${host_idx}/err-usercode.log"
+    local sorter_errolog="${3}/${host_idx}/err-sorter.log"
 
     sorter="2>$sorter_errolog"
     if [ "$sort_on_out" == "yes" ] ; then
@@ -148,8 +148,8 @@ bred_compose_task() {
     local envvars=
     local _namenode=$(hostname)
     local _hosts="${hosts}"
-    local _bredfs_init=$(bredfs_compose_init "/${tmp_dir}/fs" | base64 -w 0)
-    local _bredfs_write=$(bredfs_compose_write "${_namenode}" '/${tmp_dir}/fs' | base64 -w 0)
+    local _bredfs_init=$(bredfs_compose_init "${tmp_dir}/fs" | base64 -w 0)
+    local _bredfs_write=$(bredfs_compose_write "${_namenode}" '${tmp_dir}/fs' | base64 -w 0)
     local _bredfs_read=$(bredfs_compose_read "${tmp_dir}/fs" "${host_idx:-'-'}" "${_hosts}" | base64 -w 0)
     envvars="BRED_PART_ID=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\""
     envvars="${envvars} BRED_USERCODE='$userfunc'"
