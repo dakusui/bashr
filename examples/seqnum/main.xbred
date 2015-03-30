@@ -3,14 +3,15 @@
 ####
 #Top level task to generate partition id -> partition offset
 #Id Type Sink s     Key Interpreter Task
-r   L    -           -   sh;-c       inline:'xbred ${XBRED_SELF} -k 0'
+r   L    -           -   sh;-c       inline:xbred ${XBRED_SELF} -k 0 && xbred ${XBRED_SELF} -k 1 && xbred ${XBRED_SELF} -k 2
 ####
 #Give a partition id to each item
-0   M    1;>num-text -   awk         inline:'{ print $ENVIRON["BRED_PART_ID"],i++,$0; }'
+0   M    -           -   sh;-c       inline:nl -w 1 -s " " -b a| xargs -d "\n" -n 1 printf "${BRED_PART_ID} %s\n"| TO=/path/to/store eval "$(echo -n $BREDFS_WRITE | base64 -d)"
 ####
 #Count number of items in each partition.
-1   R    2           1   awk         inline:'BEGIN { i=0; } { i++; } END { print ENVIRON["BRED_PART_ID"],i; }'
+1   M    2           1   awk         inline:FROM=/path/to/store WHERE='grep -E "^$BRED_PART_ID "' eval '$(echo -n $BREDFS_READ)' | wc -l | xargs -n 1 -d "\n" printf "$BRED_PART_ID %s\n" | TO="/path/to/store_num" eval '$(echo -n $BREDFS_WRITE | base64 -d)'
 ####
 #Calculate each partition's offset
-2   L    >offset     -   awk         inline:'BEGIN { i=0; } { print $1,i+$2; }'
+2   L    3           -   awk         inline:BEGIN { i=0; } { print $1,i+$2; }
+3   L    -           -   sh;-c       inline:TO="/path/to/store_offset" eval '$(echo -n $BREDFS_WRITE)'
 3   M    0           1   awk         inline:'BEGIN { read offset from a file here; offset=0; } { l=offset+$2; $1=$2=""; print l,$0; }'

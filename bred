@@ -37,7 +37,6 @@ showhelp() {
   echo   "  -p: base port, default = 8192"
   echo   "  -M: mode ('map', 'reduce', 'compat'), default = 'compat'"
   echo   "  -I: interpreter. ignored if 'compat' mode is used, default = 'bash -c'"
-  echo   "  -j: job index, default = 0"
   echo   "  -c: column to partition, default = 1 (1-based)"
   echo   "  -i: input file, default = stdin"
   echo   "  -o: output file, default = stdout"
