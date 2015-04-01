@@ -291,20 +291,14 @@ bred_compose_task() {
     esac
 }
 
-####
-# Distributes shared resources among hosts
-#
-# Parameters:
-# - $1 : A directory that stores resources to be distributed
-# - $2 : Hosts
-bred_distribute_shared_resources() {
-  local _shared_path="${1}"
-  local _each=
-  for _each in $(for _each in ${2}; do
-    echo ${_each}
-    done | sort | uniq); do
-    scp -r "${_shared_path}" "${_each}":"${_shared_path}"
-  done
+bred_setup_shared_resources() {
+  local _host="$1"
+  local _shared_dir="$2"
+  local _usercode="$3"
+  mkdir -p "${_shared_dir}"
+  echo "${_usercode}" > "${_shared_dir}/usercode"
+  cp "$(dirname $0)/bred-core" "${_shared_dir}/"
+  rsync -r "${_shared_dir}"  "${_host}":"${_shared_dir}"
 }
 
 ####
@@ -331,14 +325,6 @@ bred_executejob() {
   local in_files=
   
   # now, for each host, set up in and out fifos (and a netcat for each), and ssh to each host to set up workers listening on netcat
-  mkdir -p "${jobpath}/"
-  mkdir -p "${jobpath}/shared"
-  mkdir -p "${jobpath}/shared/bin"
-  echo "${task}" > "${jobpath}/shared/bin/job"
-  mkdir -p "${jobpath}/shared/lib"
-  cp "$(dirname $0)/bred-core" "${jobpath}/lib"
-  
-  bred_distribute_shared_resources "${jobpath}/shared" "${hosts}"
   mkdir -p "${jobpath}/"{in,out}
   for host in ${hosts}; do
     debug "bred: bred_executejob: BEGIN: for"
@@ -361,6 +347,7 @@ bred_executejob() {
     # start task process on remote side and connect to it to the listener
     # 1) compose 'task' component based on execution mode (map, reduce, or compat)
     bred_compose_task "$mode" "$host_idx" "${nodepath}"
+    bred_setup_shared_resources "${host}" "${nodepath}/${host_idx}/shared" "${usercode}"
     # 2) start the task.
     ssh "$host" -n "\
             tail -s0.1 -f --pid=$pid ${nodepath}/${host_idx}/in 2>/dev/null </dev/null \
