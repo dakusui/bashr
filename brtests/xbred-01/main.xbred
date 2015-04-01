@@ -1,4 +1,4 @@
 #!/usr/local/bin/xbred
 
 #Id   Type Sinks          Key Interpreter Job
-Job1  M    -              -   sh;-c       inline:"cat -n"
+Job1  M    -              -   sh          inline:"cat -n"

@@ -36,7 +36,7 @@ showhelp() {
   echo   "      default hosts from ~/.br.hosts or /etc/br.hosts"
   echo   "  -p: base port, default = 8192"
   echo   "  -M: mode ('map', 'reduce', 'compat'), default = 'compat'"
-  echo   "  -I: interpreter. ignored if 'compat' mode is used, default = 'bash -c'"
+  echo   "  -I: interpreter. ignored if 'compat' mode is used, default = 'bash'"
   echo   "  -c: column to partition, default = 1 (1-based)"
   echo   "  -i: input file, default = stdin"
   echo   "  -o: output file, default = stdout"
@@ -95,7 +95,7 @@ bred_parseopt() {
   base_port=8192
   job_idx=-1
   mode='compat'
-  interpreter='bash -c'
+  interpreter='bash'
   hosts=
   mapcolumn=1
   userfunc=
@@ -161,54 +161,52 @@ bred_parseopt() {
 #   (enviromnet) LC_ALL
 #   (from opt)   mapcolumn, interpreter, userfunc, sort_mem, tmp_dir
 # * out
-#   task
+#   task,usercode
 # * local
-#   sorter, usercode, envvars
+#   sorter, envvars
 bred_compose_task() {
-    # mode: 'map', 'reduce', 'compat'
-    local mode=$1
-    local host_idx=$2
-    local usercode_errlog="${3}/${host_idx}/err-usercode.log"
-    local sorter_errolog="${3}/${host_idx}/err-sorter.log"
-
-    sorter="2>$sorter_errolog"
-    if [ "$sort_on_out" == "yes" ] ; then
-	sorter="| LC_ALL='$LC_ALL' sort -S$sort_mem -T$tmp_dir -k$sort_column,$sort_column $sort_opt  2>$sorter_errolog"
-    fi
-
-    local usercode=
-    local envvars=
-    local _namenode=$(hostname)
-    local _hosts="${hosts}"
-    local _bredfs_init=$(bredfs_compose_init "${tmp_dir}/fs" | base64 -w 0)
-    local _bredfs_write=$(bredfs_compose_write "${_namenode}" '${tmp_dir}/fs' | base64 -w 0)
-    local _bredfs_read=$(bredfs_compose_read "${tmp_dir}/fs" "${host_idx:-'-'}" "${_hosts}" | base64 -w 0)
-    envvars="BRED_PART_ID=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\""
-    envvars="${envvars} BRED_USERCODE='$userfunc'"
-    envvars="${envvars} BREDFS_INIT='${_bredfs_init}'"
-    envvars="${envvars} BREDFS_WRITE='${_bredfs_write}'"
-    envvars="${envvars} BREDFS_READ='${_bredfs_read}'"
-
-    case "$mode" in
-        map)
-            if [[ -z "$userfunc" ]]; then
+  # mode: 'map', 'reduce', 'compat'
+  local mode=$1
+  local host_idx=$2
+  local usercode_errlog="${3}/${host_idx}/err-usercode.log"
+  local sorter_errolog="${3}/${host_idx}/err-sorter.log"
+  
+  sorter="2>$sorter_errolog"
+  if [ "$sort_on_out" == "yes" ] ; then
+    sorter="| LC_ALL='$LC_ALL' sort -S$sort_mem -T$tmp_dir -k$sort_column,$sort_column $sort_opt  2>$sorter_errolog"
+  fi
+  
+  local envvars=
+  local _namenode=$(hostname)
+  local _hosts="${hosts}"
+  local _bredfs_init=$(bredfs_compose_init "${tmp_dir}/fs" | base64 -w 0)
+  local _bredfs_write=$(bredfs_compose_write "${_namenode}" '${tmp_dir}/fs' | base64 -w 0)
+  local _bredfs_read=$(bredfs_compose_read "${tmp_dir}/fs" "${host_idx:-'-'}" "${_hosts}" | base64 -w 0)
+  local _usercode_path="${nodepath}/${host_idx}/shared/usercode"
+  usercode=
+  envvars="BRED_PARTID=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\""
+  envvars="${envvars} BRED_USERCODE_PATH='${_usercode_path}'"
+  envvars="${envvars} BREDFS_INIT='${_bredfs_init}'"
+  envvars="${envvars} BREDFS_WRITE='${_bredfs_write}'"
+  envvars="${envvars} BREDFS_READ='${_bredfs_read}'"
+  
+  case "$mode" in
+    map)
+      if [[ -z "$userfunc" ]]; then
                 echo "`basename $0`: $mode is specified. must specify userfunc with -r"
                 usage $1
-            fi
-            usercode='{
-                cmd=sprintf("%s %c%s%c", ENVIRON["BRED_INTERPRETER"], 39, ENVIRON["BRED_USERCODE"], 39);
-                print | cmd; 
-            }'
-            task="| $envvars $AWK '$usercode' $sorter"
-            ;;
-        reduce)
-            if [[ -z "$userfunc" ]]; then
-                echo "`basename $0`: ${mode} is specified. must specify userfunc with -r"
-                usage $1
-            fi
-            case ${interpreter} in
-                "awk-native")
-                    usercode='BEGIN {
+      fi
+      usercode=${userfunc}
+      task="| $envvars ${interpreter} '${_usercode_path}' $sorter"
+      ;;
+    reduce)
+      if [[ -z "$userfunc" ]]; then
+        echo "`basename $0`: ${mode} is specified. must specify userfunc with -r"
+        usage $1
+      fi
+      case ${interpreter} in
+        "awk-native")
+          usercode='BEGIN {
                         bred_firsttime=1;
                         bred_key=FS;
                         bred_keyindex=ENVIRON["BRED_KEYINDEX"];
@@ -230,28 +228,28 @@ bred_compose_task() {
                         }
                     }
                     __USERCODE__'
-                    #
-                    #  __USERCODE__ is replaced with a string provided by user using '-r' option.
-                    #  Below is an example to perform 'word count'.
-                    #
-                    #  function bredBeginReduce(key_idx) {
-                    #    i=0;
-                    #    key=$key_idx;
-                    #    print "BEGIN", key, "(", key_idx, ")"
-                    #  }
-                    #  function bredReduce(key_idx) {
-                    #     print "REDUCE", $key_idx
-                    #     i++;
-                    #  }
-                    #  function bredEndReduce() {
-                    #    print "END", key, i;
-                    #  }
-                    usercode=${usercode//__USERCODE__/${userfunc}}
-                    task="| $envvars $AWK '$usercode' 2> $usercode_errlog $sorter"
-                    ;;
-                *)
-                    usercode='BEGIN {
-                        cmd=sprintf("%s %c%s%c", ENVIRON["BRED_INTERPRETER"], 39, ENVIRON["BRED_USERCODE"], 39);
+          #
+          #  __USERCODE__ is replaced with a string provided by user using '-r' option.
+          #  Below is an example to perform 'word count'.
+          #
+          #  function bredBeginReduce(key_idx) {
+          #    i=0;
+          #    key=$key_idx;
+          #    print "BEGIN", key, "(", key_idx, ")"
+          #  }
+          #  function bredReduce(key_idx) {
+          #     print "REDUCE", $key_idx
+          #     i++;
+          #  }
+          #  function bredEndReduce() {
+          #    print "END", key, i;
+          #  }
+          usercode=${usercode//__USERCODE__/${userfunc}}
+          task="| $envvars $AWK -f '${_usercode_path}' 2> $usercode_errlog $sorter"
+          ;;
+        *)
+          local _usercode_executor='BEGIN {
+                        cmd=sprintf("%s %c%s%c", ENVIRON["BRED_INTERPRETER"], 39, ENVIRON["BRED_USERCODE_PATH"], 39);
                         firsttime=1;
                         key="";
                         keyindex=ENVIRON["BRED_KEYINDEX"];
@@ -271,24 +269,27 @@ bred_compose_task() {
                             close(cmd);
                         }
                     }'
-                    task="| $envvars $AWK '$usercode' 2> $usercode_errlog $sorter"
-                    ;;
-            esac
-            ;;
-        compat)
-            if [ -n "$userfunc" ]; then
-                # if we have a userfunc, add the pipe explicitly
-                usercode="| $envvars $interpreter '$userfunc' 2> $usercode_errlog"
-            else
-                usercode=""
-            fi
-            task="$sorter $usercode"
-            ;;
-        *)
-            echo "Unknown mode '$1' was given."
-            exit 1
-            ;;
-    esac
+	  usercode=${userfunc}
+          task="| $envvars $AWK '${_usercode_executor}' 2> $usercode_errlog $sorter"
+          ;;
+      esac
+      ;;
+    compat)
+      local _usercode_executor
+      if [ -n "$userfunc" ]; then
+        # if we have a userfunc, add the pipe explicitly
+        _usercode_executor="| $envvars $interpreter '${_usercode_path}' 2> $usercode_errlog"
+      else
+        _usercode_executor=""
+      fi
+      usercode="${userfunc}"
+      task="$sorter ${_usercode_executor}"
+      ;;
+    *)
+      echo "Unknown mode '$1' was given."
+      exit 1
+      ;;
+  esac
 }
 
 bred_setup_shared_resources() {

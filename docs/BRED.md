@@ -75,13 +75,13 @@ You can perform distributed indexing by one-liner with ```bred```.
 Suppose you have only several ```localhost```'s and you'll run
 
 ```bash
-find $(pwd) -type f -name '*.md' |nl -w 1 -s ' ' -b a|tee docid.dat |pv |bred -c 1 -s 3 -S1G -M map -j 0 -I 'awk' -r '{
+find $(pwd) -type f -name '*.md' |nl -w 1 -s ' ' -b a|tee docid.dat |pv |bred -c 1 -s 3 -S1G -M map -j 0 -I 'awk -f' -r '{
   for (l=1; (getline line < $2) > 0; l++) {
      gsub(/([[:punct:]]|[[:blank:]])+/, " ", line);
      n=split(line,cols," ");
      for (i = 1; i <= n; i++) { print $1, l, cols[i]; };
   }
-}' |tee terms.dat |pv |bred -c 3 -s 1 -O no -M reduce -j 1 -S1G -I 'awk' -r 'BEGIN { p=""; key="";} {
+}' |tee terms.dat |pv |bred -c 3 -s 1 -O no -M reduce -j 1 -S1G -I 'awk -f' -r 'BEGIN { p=""; key="";} {
     if (key == "") key=$3;
     p=p " " $1 "," $2
 } END { print "" key " " p; }' -o index.dat
@@ -128,6 +128,10 @@ If you prefer a script file, you can find it [here](examples/indexer.sh).
 
 The user code script you provide is executed by ```bred``` every time it finds a new key during reduce operation.
 And the user code is executed as external command using the interpreter you specify by '-I' option.
+Please be careful, you need to specify a command which interprets a file, not a string since ```bred``` internally 
+generates temporary file to be executed for your job. For shell scripts, it will be 'sh' (not 'sh -c') and 
+for awk scripts it will be 'awk -f' (not 'awk').
+
 If there are a lot of keys to be passed to the reduce function, command execution overhead damages the performance severely.
 
 ```bred``` provides another behavior mode called ```awk-native```. You can set this string to '-I' option and awk code string
@@ -165,13 +169,13 @@ But still only text files can be stored.
 ### Creating a directory
 Creating a directory is like this.
 ```
-echo "" | ./bred -r 'mkdir -p /tmp/bredfs/${BRED_PART_ID}/work' -T '-n' -c 1
+echo "" | ./bred -r 'mkdir -p /tmp/bredfs/${BRED_PARTID}/work' -T '-n' -c 1
 ```
 
 ```/tmp/bredfs``` is the directory in which you want to store your data. And this path can be anything as long as it is
 available on all the hosts.
 
-The string ```${BRED_PART_ID}``` is the trick. This portion will be expanded differently on runtime depending on which
+The string ```${BRED_PARTID}``` is the trick. This portion will be expanded differently on runtime depending on which
 ssh processes, not on which hosts, so you do not break your data even if you specify a certain host name multiple times.
 
 The portion ```/work``` is the path in the file system of poor man's DFS.
@@ -179,16 +183,16 @@ Similarly,
 
 ### Writing a file
 ```
-nl -w 1 -b a ~/Documents/FSM.md | bred -r 'cat > /tmp/bredfs/${BRED_PART_ID}/work/FSM.md' -T '-n' -c 1 >& /dev/null
+nl -w 1 -b a ~/Documents/FSM.md | bred -r 'cat > /tmp/bredfs/${BRED_PARTID}/work/FSM.md' -T '-n' -c 1 >& /dev/null
 ```
 ### Reading a file
 ```
-echo "" | bred -r 'cat /tmp/bredfs/${BRED_PART_ID}/work/FSM.md' -T '-n' -c 1 2> /dev/null | cut -f2-
+echo "" | bred -r 'cat /tmp/bredfs/${BRED_PARTID}/work/FSM.md' -T '-n' -c 1 2> /dev/null | cut -f2-
 ```
 
 ### Listing a directory
 ```
-echo "" | ./bred -r 'ls /tmp/bredfs/${BRED_PART_ID}/work |sort' -T '-n' -c 1 2> /dev/null | sort -m | uniq
+echo "" | ./bred -r 'ls /tmp/bredfs/${BRED_PARTID}/work |sort' -T '-n' -c 1 2> /dev/null | sort -m | uniq
 ```
 
 ## Classic examples
