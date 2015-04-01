@@ -291,6 +291,23 @@ bred_compose_task() {
     esac
 }
 
+####
+# Distributes shared resources among hosts
+#
+# Parameters:
+# - $1 : A directory that stores resources to be distributed
+# - $2 : Hosts
+bred_distribute_shared_resources() {
+  local _shared_path="${1}"
+  local _each=
+  for _each in $(for _each in ${2}; do
+    echo ${_each}
+    done | sort | uniq); do
+    scp -r "${_shared_path}" "${_each}":"${_shared_path}"
+  done
+}
+
+####
 # Executes a map/reduce/compat task
 # 
 # variables:
@@ -301,7 +318,7 @@ bred_compose_task() {
 #   (none)
 # * local
 #   host, pid, envvars, port_in, port_out, host_idx, out_files, in_filed, input, num_hosts
-bred_executetask() {
+bred_executejob() {
   AWK="/usr/bin/awk"
   # okay let's get started!  first we need a name for our job
   local jobpath="$tmp_dir/jm/${job_idx}/job"
@@ -314,9 +331,17 @@ bred_executetask() {
   local in_files=
   
   # now, for each host, set up in and out fifos (and a netcat for each), and ssh to each host to set up workers listening on netcat
+  mkdir -p "${jobpath}/"
+  mkdir -p "${jobpath}/shared"
+  mkdir -p "${jobpath}/shared/bin"
+  echo "${task}" > "${jobpath}/shared/bin/job"
+  mkdir -p "${jobpath}/shared/lib"
+  cp "$(dirname $0)/bred-core" "${jobpath}/lib"
+  
+  bred_distribute_shared_resources "${jobpath}/shared" "${hosts}"
   mkdir -p "${jobpath}/"{in,out}
   for host in ${hosts}; do
-    debug "bred: bred_executetask: BEGIN: for"
+    debug "bred: bred_executejob: BEGIN: for"
     ####
     # set up communication path
     # 1) master side
@@ -331,7 +356,7 @@ bred_executetask() {
     #    let's start the remote 'nc' listener and get the pid of it
     local pid=$(ssh -n "$host" "nc -l -p $port_out >${nodepath}/${host_idx}/in 2>/dev/null </dev/null & jobs -l" | awk {'print $2'})
     
-    debug "bred: bred_executetask: INFO: for (1): ${jobpath}, ${nodepath}"
+    debug "bred: bred_executejob: INFO: for (1): ${jobpath}, ${nodepath}"
     ####
     # start task process on remote side and connect to it to the listener
     # 1) compose 'task' component based on execution mode (map, reduce, or compat)
@@ -345,17 +370,17 @@ bred_executetask() {
     ####
     # Connect the task to the local forwarder of master side's
     # our local forwarders
-    debug "bred: bred_executetask: INFO: for (2)"
+    debug "bred: bred_executejob: INFO: for (2)"
     nc "${host}" "${port_in}" >"${jobpath}/in/${host_idx}" &
     nc -q0 "${host}" "${port_out}" <"${jobpath}/out/${host_idx}" &
     # our vars
-    debug "bred: bred_executetask: INFO: for (3)"
+    debug "bred: bred_executejob: INFO: for (3)"
     out_files="$out_files $jobpath/out/$host_idx"
     in_files="$in_files $jobpath/in/$host_idx"
     port_in=$(($port_in + 2))
     port_out=$(($port_in + 1))
     host_idx=$(($host_idx + 1))
-    debug "bred: bred_executetask: END: for: ${host_idx}"
+    debug "bred: bred_executejob: END: for: ${host_idx}"
   done
   
   ####    
@@ -421,7 +446,7 @@ main() {
   . "$(dirname $0)/bred-core"
   prog="`basename $0`"
   bred_parseopt "$@"
-  bred_executetask;
+  bred_executejob;
 }
 
 main "$@"
