@@ -1,0 +1,35 @@
+#!/usr/local/bin/xbred
+
+####
+#          Id: main
+#        Type: map
+# Interpreter: sh
+#         Key: 1
+#       Sinks: -
+function local main(sh,-,tokenize) inline:<<EOF
+  nl -w 1 -s ' ' -b a|
+  tee docid.dat |
+  pv 
+EOF
+
+function map tokenize(awk;-f,1,indexing) inline:<<EOF
+{
+  for (l=1; (getline line < $2) > 0; l++) {
+     gsub(/([[:punct:]]|[[:blank:]])+/, " ", line);
+     n=split(line,cols," ");
+     for (i = 1; i <= n; i++) { print $1, l, cols[i]; };
+  }
+}
+EOF
+
+function reduce indexing(awk-native,3,-) inline:<<EOF
+function bredBeginReduce(key_idx) {
+    p=""; key=$key_idx;
+}
+function bredReduce(key_idx) {
+    p=p " " $1 "," $2;
+}
+function bredEndReduce() {
+   print "" key " " p;
+}
+EOF
