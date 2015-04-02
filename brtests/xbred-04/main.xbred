@@ -5,8 +5,8 @@
 #        Type: map
 # Interpreter: sh
 #         Key: 1
-#       Sinks: job1;job2
-function map main(sh,1,job1;job2) inline:<<EOF
+#       Sinks: job1 job2
+function map main(sh,1,job1 job2) inline:<<EOF
   cat -n | tr 'a-z' 'A-Z'
 EOF
 
