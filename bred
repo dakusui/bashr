@@ -191,8 +191,10 @@ bred_compose_task() {
   local _bredfs_write=$(bredfs_compose_write "${_namenode}" '${tmp_dir}/fs' | base64 -w 0)
   local _bredfs_read=$(bredfs_compose_read "${tmp_dir}/fs" "${host_idx:-'-'}" "${_hosts}" | base64 -w 0)
   local _usercode_path="${nodepath}/${host_idx}/shared/usercode"
+  local _bredcore_path="${nodepath}/${host_idx}/shared/bred-core"
   usercode=
-  envvars="BRED_PARTID=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\""
+  envvars="source ${_bredcore_path} && "
+  envvars="${envvars} BRED_PARTID=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\""
   envvars="${envvars} BRED_USERCODE_PATH='${_usercode_path}'"
   envvars="${envvars} BREDFS_INIT='${_bredfs_init}'"
   envvars="${envvars} BREDFS_WRITE='${_bredfs_write}'"
@@ -205,7 +207,7 @@ bred_compose_task() {
                 usage $1
       fi
       usercode=${userfunc}
-      task="| $envvars ${interpreter} '${_usercode_path}' $sorter"
+      task="| ( $envvars ${interpreter} '${_usercode_path}' $sorter ) "
       ;;
     reduce)
       if [[ -z "$userfunc" ]]; then
@@ -253,7 +255,7 @@ bred_compose_task() {
           #    print "END", key, i;
           #  }
           usercode=${usercode//__USERCODE__/${userfunc}}
-          task="| $envvars $AWK -f '${_usercode_path}' 2> $usercode_errlog $sorter"
+          task="| ( $envvars $AWK -f '${_usercode_path}' 2> $usercode_errlog $sorter ) "
           ;;
         *)
           local _usercode_executor='BEGIN {
@@ -278,7 +280,7 @@ bred_compose_task() {
                         }
                     }'
 	  usercode=${userfunc}
-          task="| $envvars $AWK '${_usercode_executor}' 2> $usercode_errlog $sorter"
+          task="| ( $envvars $AWK '${_usercode_executor}' 2> $usercode_errlog $sorter ) "
           ;;
       esac
       ;;
@@ -286,7 +288,7 @@ bred_compose_task() {
       local _usercode_executor
       if [ -n "$userfunc" ]; then
         # if we have a userfunc, add the pipe explicitly
-        _usercode_executor="| $envvars $interpreter '${_usercode_path}' 2> $usercode_errlog"
+        _usercode_executor="| ( $envvars $interpreter '${_usercode_path}' 2> $usercode_errlog ) "
       else
         _usercode_executor=""
       fi

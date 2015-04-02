@@ -306,7 +306,7 @@ compose_single_task() {
   elif [[ "${_tasktype}" == "R" ]]; then
     _cmd="bred -e ${_logfile}  -c \"$(currentkey ${1})\" ${_sort_on_out} -M reduce -I \"${interpreter[${1}]}\" -f yes -r '${_tmp_file}'"
   elif [[ "${_tasktype}" == "L" ]]; then
-    _cmd="${interpreter[${1}]} '${_tmp_file}'"
+    _cmd="BRED_CORE=${BRED_CORE} ${interpreter[${1}]} '${_tmp_file}'"
   else
     quit "${prog}: line ${LINENO}: Unknown task type ${_tasktype} was specified."
   fi
@@ -441,7 +441,7 @@ parse_opts() {
 
 ################
 #
-# MAIN ENTRY POINT
+# MAIN
 #
 main() {
   # Initialize global variables
@@ -481,6 +481,6 @@ main() {
   debug "END: main"
 }
 
-. "$(dirname $0)/bred-core"
+BRED_CORE="$(dirname $0)/bred-core"
+. ${BRED_CORE}
 main $@
-
