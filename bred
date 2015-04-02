@@ -42,6 +42,7 @@ showhelp() {
   echo   "  -o: output file, default = stdout"
   echo   "  -e: error file, default = stderr"
   echo   "  -r: userfunc function, default = identity"
+  echo   "  -f: read userfunc from a file (yes/no), default = no"
   echo   "  -t: tmp dir to use, default = $HOME/.bred"
   echo   "  -S: memory to use for 'S'ort, default = 256M"
   echo   "  -s: column to 's'ort(s) on reduce (and following merge). , default is equal to -c "
@@ -108,8 +109,9 @@ bred_parseopt() {
   sort_on_out="yes"
   sort_opt=
   verbose="no"
+  local _fromfile="no"
   
-  while getopts "m:p:j:M:I:c:r:i:o:e:t:S:s:T:O:v:h" name; do
+  while getopts "m:p:j:M:I:c:f:r:i:o:e:t:S:s:T:O:v:h" name; do
     case "$name" in
       m)  hosts=$OPTARG;;
       p)  baseport=$OPTARG;;
@@ -117,6 +119,7 @@ bred_parseopt() {
       I)  interpreter=$OPTARG;;
       c)  mapcolumn=$OPTARG;;
       r)  userfunc=$OPTARG;;
+      f)  _fromfile=$OPTARG;;
       i)  input=$OPTARG;;
       o)  output=$OPTARG;;
       e)  error=$OPTARG;;
@@ -133,6 +136,11 @@ bred_parseopt() {
   # job_idx
   local _nextid=-1
   local _jid_dir="${tmp_dir}/jm"
+  if [[ "${_fromfile}" == "yes" ]]; then
+    debug "before--->${userfunc}:"
+    userfunc=`cat "${userfunc}"`
+    debug "after--->${userfunc}:"
+  fi
   mkdir -p "${_jid_dir}"
   job_idx=$(bred_gen_job_idx)
   if [[ "${job_idx}" == -1 ]]; then

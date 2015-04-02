@@ -1,6 +1,31 @@
 #!/usr/local/bin/xbred
 
-#Id   Type Sinks          Key Interpreter Job
-Job1  M    Job2           -   sh          inline:"cat -n"
-Job2  M    Job3           -   sh          inline:"cat -n"
-Job3  M    -              -   sh          inline:"cat -n"
+####
+#          Id: main
+#        Type: map
+# Interpreter: sh
+#         Key: 1
+#       Sinks: job1
+function map main(sh,1,job1) inline:<<EOF
+  cat -n
+EOF
+
+####
+#          Id: job1
+#        Type: map
+# Interpreter: sh
+#         Key: 1
+#       Sinks: -
+function map job1(sh,1,job2) inline:<<EOF
+  cat -n
+EOF
+
+####
+#          Id: job2
+#        Type: map
+# Interpreter: sh
+#         Key: 1
+#       Sinks: -
+function map job2(sh,1,-) inline:<<EOF
+  cat -n
+EOF

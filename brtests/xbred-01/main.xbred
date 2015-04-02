@@ -1,4 +1,11 @@
 #!/usr/local/bin/xbred
 
-#Id   Type Sinks          Key Interpreter Job
-Job1  M    -              -   sh          inline:"cat -n"
+####
+#          Id: main
+#        Type: map
+# Interpreter: sh
+#         Key: 1
+#       Sinks: -
+function map main(sh,1,-) inline:<<EOF
+  cat -n
+EOF

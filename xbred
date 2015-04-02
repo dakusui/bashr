@@ -85,22 +85,82 @@ read_task() {
   echo "$_ret"
 }
 
+read_xbred_func() {
+  # 0 function reduce test_reduce2(a,b) inline:grep a b c
+  # 1 reduce
+  # 2 test_reduce2
+  # 3 a,b
+  # 4 inline:grep a b c
+  # 5 
+  # 6 
+  # 7 inline:grep a b c
+  
+  # 0 function local main(sh) infline:<<EOF
+  # 1 local
+  # 2 main
+  # 3 sh
+  # 4 infline:<<EOF
+  # 5 <<EOF
+  # 6 EOF
+  # 7
+  local _line=$1
+  local _typename _funcname _args _jobdef
+  local _regex=
+  _regex="^function[[:space:]]+(map|reduce|local|pipe)[[:space:]]+([A-Za-z_][A-Za-z_0-9]*)[[:space:]]*"
+  _regex="${_regex}\(([^\)]*)\)[[:space:]]*"
+  _regex="${_regex}([a-z]+\:)(<<([A-Za-z0-9_]+)|(.+))$"
+  if [[ "${_line}" =~ $_regex ]]; then
+    _typename="${BASH_REMATCH[1]}"
+    _funcname="${BASH_REMATCH[2]}"
+    _args="${BASH_REMATCH[3]}"
+    _jobdef="${BASH_REMATCH[4]}"
+    _endmark="${BASH_REMATCH[6]}"
+    local _c=0
+    if [[ "${_endmark}" != "" ]]; then
+      local _tail="${BASH_REMATCH[5]}"
+      local _next
+      while read -r _next ; do
+	if [[ "${_next}" == "${_endmark}" ]]; then
+	  break
+	fi
+    	_jobdef=$(printf '%s%s\n ' "${_jobdef}" "${_next}")
+      done
+    fi
+  else
+    quit "line ${LINENO}: Illegal line: ${_line}"
+  fi
+  local _type=
+  case "$_typename" in
+    "map")    _type="M";;
+    "reduce") _type="R";;
+    "local")  _type="L";;
+    *) msg "Unsupported function type '${_typename}'." && exit 1;;
+  esac
+  IFS="," read -r _interpreter _key _sinks <<< "${_args}"
+  # _id _type _sinks _key _interpreter _task
+  local _debug=""
+  echo "${_debug}${_funcname}"
+  echo "${_debug}${_type}"
+  echo "${_debug}${_sinks}"
+  echo "${_debug}${_key}"
+  echo "${_debug}${_interpreter}"
+  echo "${_debug}${_jobdef}"
+}
+
 read_xbred_file() {
-  local _id _type _sinks _key _interpreter _task
-  firsttask=""
-  while read -r _id _type _sinks _key _interpreter _task
+  local _line
+  while read -r _line
   do
-    # Ignore records which start with '#'
-    if [[ "$_id" == "#"* || -z "$_id" ]]; then
+    # Ignore lines which start with '#'
+    if [[ "$_line" == "#"* || -z "$_line" ]]; then
       continue
     fi
+    local _id _type _sinks _key _interpreter _task
+    read -r _id _type _sinks _key _interpreter _task <<< $(read_xbred_func "$_line")
+    debug "id=${_id},type=${_type},sinks=${_sinks},key=${_key},interpreter=${_interpreter},task=${_task}"
     _task=$(read_task "${_task}" "${2}")
-    debug "id=${_id},type=${_type},sinks=${_sinks},key=${_key},interpreter=${_interpreter},task=${_task}\n"
     if [ ${tasktype[${_id}]+_} ]; then
       quit "line ${LINENO}: The key ${_id} is defined more than once"
-    fi
-    if [ "${firsttask}" == "" ]; then
-      firsttask=${_id}
     fi
     tasktype[${_id}]=${_type}
     sinks[${_id}]=${_sinks//\;/ }
@@ -109,10 +169,6 @@ read_xbred_file() {
     task[${_id}]=${_task}
     connected[${_id}]=""
   done <"$1"
-  if [ -z "${firsttask}" ]; then
-    quit "line ${LINENO}: No task was found."  >&2
-    exit 1
-  fi
 }
 
 ####
@@ -251,12 +307,14 @@ compose_single_task() {
     _sort_on_out="-s \"$(nextkey ${1})\""
   fi
   # value ${task[${1}]} itself is already quoted, so we don't need to quote it in _cmd again.
+  local _tmp_file=$(mktemp)
+  echo "${task[${1}]}" > "${_tmp_file}"
   if [[ "${_tasktype}" == "M" ]]; then
-    _cmd="bred -e ${_logfile} -c \"$(currentkey ${1})\" ${_sort_on_out} -M map -I \"${interpreter[${1}]}\" -r ${task[${1}]}"
+    _cmd="bred -e ${_logfile} -c \"$(currentkey ${1})\" ${_sort_on_out} -M map -I \"${interpreter[${1}]}\" -f yes -r '${_tmp_file}'"
   elif [[ "${_tasktype}" == "R" ]]; then
-    _cmd="bred -e ${_logfile}  -c \"$(currentkey ${1})\" ${_sort_on_out} -M reduce -I \"${interpreter[${1}]}\" -r ${task[${1}]}"
+    _cmd="bred -e ${_logfile}  -c \"$(currentkey ${1})\" ${_sort_on_out} -M reduce -I \"${interpreter[${1}]}\" -f yes -r '${_tmp_file}'"
   elif [[ "${_tasktype}" == "L" ]]; then
-    _cmd="${interpreter[${1}]} '${task[${1}]}'"
+    _cmd="${interpreter[${1}]} '${_tmp_file}'"
   else
     quit "${prog}: line ${LINENO}: Unknown task type ${_tasktype} was specified."
   fi
@@ -347,30 +405,6 @@ count_tasks_in_xbred_file() {
   echo ${_num}
 }
 
-validate_xbred_file_record() {
-  # (t.b.d.)
-  :
-}
-
-validate_xbred_file() {
-  # (t.b.d.)
-  # if [ ${_s} != '-' ] && [ ! -z "${connected[${_s}]}" ]; then
-  #   quit "${prog}: line ${LINENO}: ${_s} is already connected to '${connected[${_s}]}'."
-  # fi
-  :
-}
-
-####
-# Validates global variables set by user options.
-validate_opts() {
-  # bredtask=""
-  # jobmode="normal"
-  # logdir="$(pwd)"
-  # tmpdir="/tmp"
-  # xbredfile=$(readlink -e "${1}")
-  :
-}
-
 ####
 # Parses user options and assigns them to global variables that follow.
 # * bredtask
@@ -399,6 +433,7 @@ parse_opts() {
   ##
   # Validations
   # -k (bredtask)
+  debug "bredtask=${bredtask}"
   if [[ "$bredtask" =~ [^a-zA-Z0-9] ]]; then
     quit "Task name can contain only a-zA-Z0-9"
   fi
@@ -429,16 +464,15 @@ main() {
   declare -A connected
   debug "START: main: args='${@}'"
 
-  # Validate inputs
-  validate_opts
-  validate_xbred_file
   # read records from job definition file
   read_xbred_file "${xbredfile}" $(dirname "$xbredfile")
   # If bred task isn't by user, pick up the first one in the xbred
   # file and useit
-  firsttask=${bredtask:-${firsttask}}
+  firsttask="${bredtask:-main}"
+  # Dirty trick to check if an associative array has a key '$firsttask'
+  [[ -n "${tasktype[$firsttask]+isset}" ]] || quit "Task '$firsttask' is not defined."
   numtasks=$(count_tasks_in_xbred_file ${firsttask})
-  debug "INFO: main: numtasks(effective)=${numtasks}"
+  debug "INFO: main: firsttask=${firsttask} numtasks(effective)=${numtasks}"
   if [ "$jobmode" == "normal" ]; then  
     # start pipleline
     msg "starting pipeline"
