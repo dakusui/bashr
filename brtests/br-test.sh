@@ -135,7 +135,7 @@ function bredtest_1reducer() {
 3 END'
   elif [ $1 == 'actual' ]; then
     printf "03 A\n02 A\n01 B\n01 C\n" | \
-      "$SUT" -m "localhost" -j 0 -M reduce -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'  2>/dev/null
+      "$SUT" -m "localhost" -j 0 -M reduce -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'  2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -152,7 +152,7 @@ function bredtest_1reducer_sort_on_out_no() {
 2 MAIN 01 C'
   elif [ $1 == 'actual' ]; then
     printf "03 A\n02 A\n01 B\n01 C\n" | \
-      "$SUT" -m "localhost" -j 0 -M reduce -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' -O no 2>/dev/null | grep 'MAIN' | sort
+      "$SUT" -m "localhost" -j 0 -M reduce -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' -O no 2>/dev/null | grep 'MAIN' | sort
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -169,7 +169,7 @@ function bredtest_2reducers() {
 2 MAIN 01 C y'
   elif [ $1 == 'actual' ]; then
     printf "03 A x\n02 A zz\n01 B z\n01 C y\n" | \
-      "$SUT" -m "localhost localhost" -j 0 -M reduce -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null | grep "MAIN" | sort
+      "$SUT" -m "localhost localhost" -j 0 -M reduce -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null | grep "MAIN" | sort
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -186,7 +186,7 @@ function bredtest_2reducersK3() {
 1 MAIN 02 A zz'
   elif [ $1 == 'actual' ]; then
     printf "03 A x\n02 A zz\n01 B z\n01 C y\n" | \
-      "$SUT" -c 3 -m "localhost localhost" -j 0 -M reduce -s 5 -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'  2>/dev/null | grep "MAIN"
+      "$SUT" -c 3 -m "localhost localhost" -j 0 -M reduce -s 5 -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'  2>/dev/null | grep "MAIN"
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -205,7 +205,7 @@ function bredtest_1mapper() {
 5 END'
   elif [ $1 == 'actual' ]; then
     printf "03 A\n02 A\n01 B\n01 C\n" | \
-      "$SUT" -m "localhost" -j 0 -M map -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null
+      "$SUT" -m "localhost" -j 0 -M map -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -223,7 +223,7 @@ function bredtest_1mapper_sort_on_out_no() {
 5 END'
   elif [ $1 == 'actual' ]; then
     printf "03 A\n02 A\n01 B\n01 C\n" | \
-      "$SUT" -m "localhost" -j 0 -M map -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' -O no 2>/dev/null
+      "$SUT" -m "localhost" -j 0 -M map -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' -O no 2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -244,7 +244,7 @@ function bredtest_2mappers() {
 4 END'
   elif [ $1 == 'actual' ]; then
     printf "03 A\n02 A\n01 B\n01 C\n" | \
-      "$SUT" -m "localhost localhost" -j 0 -M map -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null
+      "$SUT" -m "localhost localhost" -j 0 -M map -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -296,7 +296,7 @@ function bredtest_2mappersK2() {
 '
   elif [ $1 == 'actual' ]; then
     printf "03 A\n02 A\n01 B\n01 C\n" | \
-      "$SUT" -m "localhost localhost" -j 0 -c 2 -M map -I awk -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null | grep MAIN | sort -k 1,4
+      "$SUT" -m "localhost localhost" -j 0 -c 2 -M map -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null | grep MAIN | sort -k 1,4
   else
     echo "Invalid mode $1 is specified"
     exit 1

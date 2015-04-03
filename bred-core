@@ -39,7 +39,7 @@ bred_load_brhosts() {
 # - $1: A base directory of the local stroage of poorman's DFS
 bredfs_compose_init() {
   local _fsbase=${1}
-  local _s='echo "" | bred -r "mkdir -p %s/\${BRED_PART_ID}/$(dirname ${STORE}) ; truncate -s 0 %s/\${BRED_PART_ID}/$(dirname ${STORE})/$(basename ${STORE})" -T "-n" -c 1'
+  local _s='echo "" | bred -r "mkdir -p %s/\${BRED_PARTID}/$(dirname ${STORE}) ; truncate -s 0 %s/\${BRED_PARTID}/$(dirname ${STORE})/$(basename ${STORE})" -T "-n" -c 1'
   printf "${_s}" "${_fsbase}" "${_fsbase}"
 }
 
@@ -54,7 +54,7 @@ bredfs_compose_write() {
   local _namenode=(${1})
   local _fsbase=${2}
 
-  local _f='nl -w 1 -b a -s " " ${APPEND} | ssh -o SendEnv=TO localhost "bred -r '\''cat >> '${_fsbase}'/\${BRED_PART_ID}/${TO}'\'' -T '\''-n'\'' -c '\''1'\''"'
+  local _f='nl -w 1 -b a -s " " ${APPEND} | ssh -o SendEnv=TO localhost "bred -r '\''cat >> '${_fsbase}'/\${BRED_PARTID}/${TO}'\'' -T '\''-n'\'' -c '\''1'\''"'
   printf "${_f}" ${_namenode} ${_fsbase} '${TO}'
 }
 

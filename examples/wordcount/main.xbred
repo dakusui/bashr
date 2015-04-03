@@ -1,6 +1,44 @@
 #!/usr/local/bin/xbred
 
-#Id    Type Sinks  Key Interpreter Task
-Map1   M    Map2   1   sh;-c       inline:'xargs cat'
-Map2   M    Reduce 1   awk         file:map.awk
-Reduce R    -      1   awk         file:reduce.awk
+####
+#          Id: main
+#        Type: map
+# Interpreter: sh
+#         Key: 1
+#       Sinks: map
+function map main(sh,1,map) inline:<<EOF
+  cat
+EOF
+
+####
+#          Id: map1
+#        Type: map
+# Interpreter: sh
+#         Key: 1
+#       Sinks: reduce
+function map map(awk -f,1,reduce) inline:<<EOF
+  {
+    gsub(/([[:punct:]]|[[:blank:]])+/, " ", $0);
+    n=split($0,cols," ");
+    for (i = 1; i <= n; i++) { print cols[i]; };
+  }
+EOF
+
+####
+#          Id: reduce
+#        Type: reduce
+# Interpreter: awk -f
+#         Key: 1
+#       Sinks: -
+function reduce reduce(awk -f,1,-) inline:<<EOF
+  BEGIN {
+    c=0;
+  }
+  {
+    if (key == "") key=$1;
+    c++;
+  }
+  END {
+    print "" key " " c;
+  }
+EOF

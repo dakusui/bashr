@@ -1,0 +1,23 @@
+#!/usr/local/bin/xbred
+
+####
+#          Id: main
+#        Type: map
+# Interpreter: sh
+#         Key: 1
+#       Sinks: job1 job2
+function local main(bash,-,-) inline:<<EOF
+  . ${BRED_CORE} ;
+  bredfs init "/path/to/store-xbred-05" ;
+  xbred  -k write "${BRED_SELF}" ;
+EOF
+
+####
+#          Id: write
+#        Type: map
+# Interpreter: sh
+#         Key: 1
+#       Sinks: -
+function map write(bash,1,-) inline:<<EOF
+  xargs -n 1 printf "HELLO ${BRED_PART_ID} %s\n" | TO="/path/to/store-xbred-05" bredfs write
+EOF
