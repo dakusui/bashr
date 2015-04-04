@@ -97,7 +97,7 @@ bredfs_compose_read() {
   local _hosts=(${3})
   local _i
   local _s=''
-  _s="sort -m ${ORDER_BY:--k1,1 -n -S32M} "
+  _s="sort -m "'${ORDER_BY:--k1,1 -n -S32M}'" "
   for _i in $(seq 0 $((${#_hosts[@]} - 1))); do
     _s="${_s} <(ssh ${_hosts[${_i}]} \""
     _s="${_s} cat ${_fsbase}/${_i}/"
