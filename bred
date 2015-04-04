@@ -208,6 +208,12 @@ bred_compose_task() {
   envvars="${envvars} BREDFS_INIT='${_bredfs_init}'"
   envvars="${envvars} BREDFS_WRITE='${_bredfs_write}'"
   envvars="${envvars} BREDFS_READ='${_bredfs_read}'"
+  local _i
+  for _i in $(set -o posix ; set | grep -E "^BREDVAR_.*$"); do
+    _i="${_i#BREDVAR_}"
+    debug "INFO: bred_compose_task: ${_i}"
+    envvars="${envvars} ${_i}"
+  done
   
   case "$mode" in
     map)

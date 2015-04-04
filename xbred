@@ -32,62 +32,6 @@ debug() {
 }
 
 ####
-# Prints the content of taskdef file specified by $2.
-# The taskdef should look like '{arg1};{arg2};...;{argn}:{taskdeffile}'
-# And each arg looks like 'ENV_VAR=value'.
-# Strings in the content which look like environment variables are
-# expanded by envsubst. This means even if you do not define environment variables
-# explicitly, ones you already have in your environment are expanded automatically.
-#
-# In order to escape the expansion, you can do '${DOLLAR}SOME_ENV_VAR' instead of
-# '$SOME_ENV_VAR' in the content.
-#
-# Parameters:
-# $1 the directory from which the file is read if 'taskdeffile' portion
-#    in taskdef doesn't start with '/'.
-# $2 taskdef discussed above.
-#
-# Limitation: taskdeffile portion can't contain a colon (:)
-read_taskfile() {
-  local _dir=$1
-  local _taskdef=$2
-  local _filename="${_taskdef##*:}"
-  if [[ "${_filename}" != "/"* ]]; then
-    _filename="${_dir}/${_filename}"
-  fi
-  local _args=""
-  if [[ "${_taskdef}" == *":"* ]]; then
-    _args="${_taskdef%:*}"
-  fi
-  eval "cat ${_filename} | DOLLAR='$' BRED_SELF='${xbredfile}' ${_args} envsubst"
-}
-
-####
-# Reads 'task' field and print it. The field should look like 'file:...' or 'inline:...'.
-# If the task starts with 'file:', read_taskfile will be performed.
-# If it starts with 'inline:', the substring after the first colon will be printed.
-# Otherwise exits with status code 1.
-#
-# Parameters:
-# $1 the task field's value
-# $2 the directory from which the file is read if the task field's scheme is 'file'
-#    and the path doesn't start with '/'.
-#
-# See also: read_task_file
-read_task() {
-  local _xbredfile_dir="$2"
-  local _ret=""
-  debug "START:read_task:1=$1:2=$2"
-  case $1 in
-    file:*)   _ret="'"$(read_taskfile "${_xbredfile_dir}" "${1:5}")"'";;
-    inline:*) _ret="${1:7}";;
-    *)        echo "${prog}: line ${LINENO}: Unknown scheme is specified. (${1})" >&2 ; exit 1 ;;
-  esac
-  debug "END:read_task"
-  echo "$_ret"
-}
-
-####
 # Reads a function (job) from a xbred file
 read_xbred_func() {
   local _line=$1
@@ -157,6 +101,40 @@ read_xbred_func() {
   esac
 }
 
+read_xbred_declare() {
+  debug "START:read_xbred_declare"
+  # declare -r varname=${var}
+  # var  Abc123  'Hello World 123' '...
+  #    0 ${line} ${line}           ${line}
+  #    1 -r      -r                -r
+  #    2 varname varname           varname
+  #    3 Abc123  'Hello World 123' '...
+  #    4 Abc123  
+  #    5         Hello World 123
+  #    6                           '...
+  #      OK      OK                NG
+  local _regex="^declare[[:space:]]+(-[^[:space:]]+[[:space:]]+)?([a-zA-Z_][a-zA-Z0-9_]*)=(([^'^[:space:]]*)|'([^']*)'|(.*))$"
+
+  if [[ "${_line}" =~ $_regex ]]; then
+    local _c=0
+    for _i in "${BASH_REMATCH[@]}"; do
+      debug "INFO: ${_c}: ${_i}"
+      _c=$((${_c} + 1))
+    done
+    local _varname="${BASH_REMATCH[2]}"
+    if [[ -n "${BASH_REMATCH[6]}" ]]; then
+      quit "${LINENO}: Illegal value: ${BASH_REMATCH[6]}"
+    fi
+    local _varvalue="${BASH_REMATCH[4]}"
+    _varvalue="${_varvalue:-${BASH_REMATCH[5]}}"
+    vars["${_varname}"]="${_varvalue}"
+    debug "INFO: read_xbred_declare: ${_varname}=${vars[${_varname}]}"
+  else
+    quit "${LINENO}: Illegal line: '${line}'"
+  fi
+  debug "END: read_xbred_declare"
+}
+
 read_xbred_file() {
   local _line
   while read -r _line
@@ -165,18 +143,28 @@ read_xbred_file() {
     if [[ "$_line" == "#"* || -z "$_line" ]]; then
       continue
     fi
-    local _id _type _sinks _key _interpreter _packedtask
-    read -r _id _type _sinks _key _interpreter _packedtask <<< $(read_xbred_func "$_line")
-    debug "INFO: id=${_id},type=${_type},sinks=${_sinks},key=${_key},interpreter=${_interpreter},packedtask=${_packedtask}"
-    if [ ${tasktype[${_id}]+_} ]; then
-      quit "line ${LINENO}: The key ${_id} is defined more than once"
-    fi
-    tasktype[${_id}]=${_type}
-    sinks[${_id}]=${_sinks//\;/ }
-    key[${_id}]=${_key}
-    interpreter[${_id}]=${_interpreter//\;/ }
-    task[${_id}]=${_packedtask}
-    connected[${_id}]=""
+    case "${_line}" in
+      function*)
+	local _id _type _sinks _key _interpreter _packedtask
+	read -r _id _type _sinks _key _interpreter _packedtask <<< $(read_xbred_func "$_line")
+	debug "INFO: id=${_id},type=${_type},sinks=${_sinks},key=${_key},interpreter=${_interpreter},packedtask=${_packedtask}"
+	if [ ${tasktype[${_id}]+_} ]; then
+	  quit "line ${LINENO}: The key ${_id} is defined more than once"
+	fi
+	tasktype[${_id}]=${_type}
+	sinks[${_id}]=${_sinks//\;/ }
+	key[${_id}]=${_key}
+	interpreter[${_id}]=${_interpreter//\;/ }
+	task[${_id}]=${_packedtask}
+	connected[${_id}]=""
+	;;
+      declare*)
+	read_xbred_declare "${_line}"
+	;;
+      *)
+	quit "Syntax error: ${_line}"
+	;;
+    esac
   done <"$1"
 }
 
@@ -337,7 +325,11 @@ compose_single_task() {
   else
     quit "${prog}: line ${LINENO}: Unknown task type ${_tasktype} was specified."
   fi
-  _cmd="BRED_SELF='${xbredfile}' ${_cmd}"
+  local _envvars="BRED_SELF='${xbredfile}'"
+  for _i in "${!vars[@]}"; do
+    _envvars="${_envvars} ${_i}='${vars[$_i]}' BREDVAR_${_i}='${vars[$_i]}'"
+  done
+  _cmd="${_envvars} ${_cmd}"
   echo "${_cmd}"
 }
 
@@ -481,6 +473,7 @@ main() {
   declare -A interpreter
   declare -A task
   declare -A connected
+  declare -A vars
   debug "START: main: args='${@}'"
   debug "INFO: main: ${BRED_CORE}"
 

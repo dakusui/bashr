@@ -112,7 +112,7 @@ bredfs_compose_read() {
 # Exports BREDFS environment variables
 bredfs_exportenv() {
   local _host_idx="${1:-}"
-  local _hosts=$(bred_load_brhosts $2)
+  local _hosts=$(bred_load_brhosts ${2:-""})
   local _namenode="${_hosts[0]}"
   local _fsbase="${3:-${HOME}/.bred/fs}"
   export BREDFS_INIT=$(bredfs_compose_init "${_fsbase}" | base64 -w 0)
@@ -149,3 +149,6 @@ bredfs() {
   esac
   eval ${_func}
 }
+
+# Export the environment variables
+bredfs_exportenv
