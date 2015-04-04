@@ -77,11 +77,13 @@ read_taskfile() {
 read_task() {
   local _xbredfile_dir="$2"
   local _ret=""
+  debug "START:read_task:1=$1:2=$2"
   case $1 in
     file:*)   _ret="'"$(read_taskfile "${_xbredfile_dir}" "${1:5}")"'";;
     inline:*) _ret="${1:7}";;
     *)        echo "${prog}: line ${LINENO}: Unknown scheme is specified. (${1})" >&2 ; exit 1 ;;
   esac
+  debug "END:read_task"
   echo "$_ret"
 }
 
@@ -89,32 +91,35 @@ read_task() {
 # Reads a function (job) from a xbred file
 read_xbred_func() {
   local _line=$1
-  local _typename _funcname _args _jobdef
+  local _typename _funcname _args _scheme _jobdef
   local _regex=
   _regex="^function[[:space:]]+(map|reduce|local|pipe)[[:space:]]+([A-Za-z_][A-Za-z_0-9]*)[[:space:]]*"
   _regex="${_regex}\(([^\)]*)\)[[:space:]]*"
   _regex="${_regex}([a-z]+\:)(<<([A-Za-z0-9_]+)|(.+))$"
   if [[ "${_line}" =~ $_regex ]]; then
+    local _c=0
+    for _i in "${BASH_REMATCH[@]}"; do
+      debug "INFO: ${_c}: ${_i}"
+      _c=$((${_c} + 1))
+    done
     _typename="${BASH_REMATCH[1]}"
     _funcname="${BASH_REMATCH[2]}"
     _args="${BASH_REMATCH[3]}"
-    _jobdef="${BASH_REMATCH[4]}"
+    _scheme="${BASH_REMATCH[4]}"
+    _jobdef=()
     _endmark="${BASH_REMATCH[6]}"
-    local _c=0
-    if [[ "${_endmark}" != "" ]]; then
+    if [[ "${_endmark}" == "" ]]; then
+      _jobdef="${BASH_REMATCH[7]}"
+    else
       local _tail="${BASH_REMATCH[5]}"
       local _next
       while read -r _next ; do
 	if [[ "${_next}" == "${_endmark}" ]]; then
 	  break
 	fi
-    	_jobdef=$(printf '%s%s\n ' "${_jobdef}" "${_next}")
+    	_jobdef+=("${_next}")
       done
       local _i _c=0
-      for _i in "${BASH_REMATCH[@]}"; do
-	debug "INFO: ${_c}: ${_i}"
-	_c=$((${_c} + 1))
-      done
     fi
   else
     quit "line ${LINENO}: Illegal line: ${_line}"
@@ -128,15 +133,28 @@ read_xbred_func() {
   esac
   IFS="," read -r _interpreter _key _sinks <<< "${_args}"
   # _id _type _sinks _key _interpreter _task
-  local _debug=""
-  echo "${_debug}${_funcname}"
-  echo "${_debug}${_type}"
+  echo "${_funcname}"
+  echo "${_type}"
   # Encode spaces to semicolons not to confuse the caller
-  echo "${_debug}${_sinks// /\;}"
-  echo "${_debug}${_key}"
+  echo "${_sinks// /\;}"
+  echo "${_key}"
   # Encode spaces to semicolons not to confuse the caller
-  echo "${_debug}${_interpreter// /\;}"
-  echo "${_debug}${_jobdef}"
+  echo "${_interpreter// /\;}"
+  case "${_scheme}" in
+    file:)
+      local _filecontent=$(<${_jobdef})
+      if [[ -z "${_filecontent}" ]]; then
+	quit "file not found or the file is empty ${_jobdef}"
+      fi
+      echo $(pack_arr $'\n' "${_filecontent[@]}")
+      ;;
+    inline:)
+      echo $(pack_arr $'\n' "${_jobdef[@]}")
+      ;;
+    *)
+      quit "Unknown scheme is specified '${_scheme}'"
+      ;;
+  esac
 }
 
 read_xbred_file() {
@@ -147,10 +165,9 @@ read_xbred_file() {
     if [[ "$_line" == "#"* || -z "$_line" ]]; then
       continue
     fi
-    local _id _type _sinks _key _interpreter _task
-    read -r _id _type _sinks _key _interpreter _task <<< $(read_xbred_func "$_line")
-    debug "INFO: id=${_id},type=${_type},sinks=${_sinks},key=${_key},interpreter=${_interpreter},task=${_task}"
-    _task=$(read_task "${_task}" "${2}")
+    local _id _type _sinks _key _interpreter _packedtask
+    read -r _id _type _sinks _key _interpreter _packedtask <<< $(read_xbred_func "$_line")
+    debug "INFO: id=${_id},type=${_type},sinks=${_sinks},key=${_key},interpreter=${_interpreter},packedtask=${_packedtask}"
     if [ ${tasktype[${_id}]+_} ]; then
       quit "line ${LINENO}: The key ${_id} is defined more than once"
     fi
@@ -158,7 +175,7 @@ read_xbred_file() {
     sinks[${_id}]=${_sinks//\;/ }
     key[${_id}]=${_key}
     interpreter[${_id}]=${_interpreter//\;/ }
-    task[${_id}]=${_task}
+    task[${_id}]=${_packedtask}
     connected[${_id}]=""
   done <"$1"
 }
@@ -300,7 +317,17 @@ compose_single_task() {
   fi
   # value ${task[${1}]} itself is already quoted, so we don't need to quote it in _cmd again.
   local _tmp_file=$(mktemp)
-  echo "${task[${1}]}" > "${_tmp_file}"
+  local _task
+  IFS=$'\n' _task=($(unpack_arr "${task[${1}]}"))
+  debug "INFO:compose_single_task(tmp_file):${_tmp_file}"
+  debug "INFO:compose_single_task(packed):${task[${1}]}"
+  debug "INFO:compose_single_task(unpacked):${_task}"
+  local _i
+  for _i in "${_task[@]}"; do
+    debug "INFO:compose_single_task(loop):${_i}"
+    printf "%s\n" ${_i}>> "${_tmp_file}"
+  done
+
   if [[ "${_tasktype}" == "M" ]]; then
     _cmd="bred -e ${_logfile} -c \"$(currentkey ${1})\" ${_sort_on_out} -M map -I \"${interpreter[${1}]}\" -f yes -r '${_tmp_file}'"
   elif [[ "${_tasktype}" == "R" ]]; then
@@ -455,6 +482,7 @@ main() {
   declare -A task
   declare -A connected
   debug "START: main: args='${@}'"
+  debug "INFO: main: ${BRED_CORE}"
 
   # read records from job definition file
   read_xbred_file "${xbredfile}" $(dirname "$xbredfile")
@@ -481,6 +509,6 @@ main() {
   debug "END: main"
 }
 
-BRED_CORE="$(dirname $0)/bred-core"
+BRED_CORE="$(dirname $(readlink -e $0))/bred-core"
 . ${BRED_CORE}
 main $@

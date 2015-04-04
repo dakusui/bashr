@@ -21,6 +21,31 @@ read_stdin() {
 }
 
 ####
+# Packs an array in to a string
+#
+# Parameters:
+# - $@: Array to be packed
+pack_arr() {
+  local _sep="$1"
+  shift
+  local _i
+  for _i in "$@"; do
+    printf '%s%s' "${_i}" "${_sep}"
+  done | base64 -w 0
+}
+
+####
+# Unpacks a packed array to an array
+# Example:
+# arr=($(unpack_arr s))
+#
+# Parameters:
+# - $1: A string which packs an array
+unpack_arr() {
+  echo -n "$1" | base64 -d
+}
+
+####
 # Loads brhosts
 bred_load_brhosts() {
   if [[ -n "$1" ]]; then
@@ -89,7 +114,7 @@ bredfs_exportenv() {
   local _host_idx="${1:-}"
   local _hosts=$(bred_load_brhosts $2)
   local _namenode="${_hosts[0]}"
-  local _fsbase="${3:-/tmp/bredfs}"
+  local _fsbase="${3:-${HOME}/.bred/fs}"
   export BREDFS_INIT=$(bredfs_compose_init "${_fsbase}" | base64 -w 0)
   export BREDFS_WRITE=$(bredfs_compose_write "${_namenode}" "${_fsbase}" | base64 -w 0)
   export BREDFS_READ=$(bredfs_compose_read "${_fsbase}" "${_host_idx:-'-'}" "${_hosts}" | base64 -w 0)

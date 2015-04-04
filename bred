@@ -62,6 +62,15 @@ debug() {
 }
 
 ####
+# Checks if debug mode is enabled
+is_debug() {
+  if [ "${BRED_DEBUG:-off}" == "on" ]; then
+    return 0
+  fi
+  return 1
+}
+
+####
 # Generates job index
 # Return:
 # - -1: Failed to generate job index.
@@ -193,7 +202,7 @@ bred_compose_task() {
   local _usercode_path="${nodepath}/${host_idx}/shared/usercode"
   local _bredcore_path="${nodepath}/${host_idx}/shared/bred-core"
   usercode=
-  envvars="source ${_bredcore_path} && "
+  envvars="${envvars} BRED_CORE='${_bredcore_path}'"
   envvars="${envvars} BRED_PARTID=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\""
   envvars="${envvars} BRED_USERCODE_PATH='${_usercode_path}'"
   envvars="${envvars} BREDFS_INIT='${_bredfs_init}'"
@@ -429,11 +438,13 @@ bred_executejob() {
   
   ####    
   # finally, clean up after ourselves
-  rm -rf "${jobpath:?something goes wrong!}"
-  for host in ${hosts}; do
-    ssh "$host" "rm -fr ${nodepath:?'node path isn't set''}"
-  done
-  rm -fr "${tmp_dir:?something goes wrong!}/jm/${job_idx:?something goes wrong!}"
+  if  ! is_debug ; then
+    rm -rf "${jobpath:?something goes wrong!}"
+    for host in ${hosts}; do
+      ssh "$host" "rm -fr ${nodepath:?'node path isn't set''}"
+    done
+    rm -fr "${tmp_dir:?something goes wrong!}/jm/${job_idx:?something goes wrong!}"
+  fi
   
   ####    
   # TODO: is there a safe way to kill subprocesses upon fail?
