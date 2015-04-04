@@ -9,8 +9,19 @@
 function local main(bash,-,-) inline:<<EOF
   . ${BRED_CORE}
   bredfs_exportenv
-  STORE="/path/to/store-xbred-05-b" bredfs init
-  xbred  -k write "${BRED_SELF}"
+  STORE="/path/to/store-xbred-05" bredfs init
+  STORE="/path/to/store-xbred-05-partid" bredfs init
+  STORE="/path/to/store-xbred-05-offset" bredfs init
+  STORE="/path/to/store-xbred-05-result" bredfs init
+  xbred  -k partnum "${BRED_SELF}"
+
+  _c=0
+  FROM="/path/to/store-xbred-05-partid" bredfs read | while read -r _i ; do
+    read -a _j <<< $_i
+    echo "${_j[0]} $_c"
+    _c=$((_c + ${_j[1]}))
+  done | TO="/path/to/store-xbred-05-offset" bredfs write
+  echo | xbred -k seqnum "${BRED_SELF}"
 EOF
 
 ####
@@ -19,8 +30,22 @@ EOF
 # Interpreter: sh
 #         Key: 1
 #       Sinks: -
-function map write(bash,1,-) inline:<<EOF
+function map partnum(bash,1,-) inline:<<EOF
   . ${BRED_CORE}
   bredfs_exportenv
-  xargs -n 1 printf "HELLO ${BRED_PARTID} %s\n" | TO="/path/to/store-xbred-05" bredfs write
+  xargs -d "\n" -n 1 printf ":part${BRED_PARTID}: %s\n"|
+    tee >(TO="/path/to/store-xbred-05" bredfs write) |
+        echo ":part${BRED_PARTID}: $(wc -l)" | TO="/path/to/store-xbred-05-partid" bredfs write
+EOF
+
+function map seqnum(bash,1,-) inline:<<EOF
+  . ${BRED_CORE}
+  bredfs_exportenv
+  offset=$(SELECT="cut -f 3 -d ' '" FROM="/path/to/store-xbred-05-offset" WHERE="grep ':part${BRED_PARTID}:'" bredfs read)
+  SELECT="cat" FROM="/path/to/store-xbred-05" WHERE="grep ':part${BRED_PARTID}:'" bredfs read | while read -r line; do
+    read -a cols <<< "${line}"
+    part="${cols[1]}"
+    ln=$((${cols[0]} + ${offset}))
+    echo "${ln} ${cols[@]:2}"
+  done | TO="/path/to/store-xbred-05-result" bredfs write
 EOF
