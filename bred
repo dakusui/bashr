@@ -324,7 +324,7 @@ bred_setup_shared_resources() {
   mkdir -p "${_shared_dir}"
   echo "${_usercode}" > "${_shared_dir}/usercode"
   cp "$(dirname $0)/bred-core" "${_shared_dir}/"
-  rsync -r "${_shared_dir}"  "${_host}":"${_shared_dir}"
+  rsync -r "${_shared_dir}"  "${_host}":"$(dirname ${_shared_dir})/"
 }
 
 ####

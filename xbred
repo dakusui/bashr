@@ -25,10 +25,24 @@ usage() {
 
 ####
 # Writes a debug message
-debug() {
+xbred_debug() {
   if [ "${XBRED_DEBUG:-off}" == "on" ]; then
     echo "${prog}: DEBUG: ${1}" >&2
   fi
+}
+
+####
+# Checks pipe error
+error_check() {
+  local _pipestatus="${PIPESTATUS[@]}"
+  local _exitcode=$?
+  for _i in "${_pipestatus[@]}"; do
+    if [[ ! "$_i" == 0 ]]; then
+      echo "${prog}: ERROR: exitcode=${_exitcode}: pipestatus=${_pipestatus[@]}" >& 2
+      return 1
+    fi   
+  done
+  return ${_exitcode} 
 }
 
 ####
@@ -50,7 +64,7 @@ read_xbred_func() {
   if [[ "${_line}" =~ $_regex ]]; then
     local _c=0
     for _i in "${BASH_REMATCH[@]}"; do
-      debug "INFO: ${_c}: ${_i}"
+      xbred_debug "INFO: ${_c}: ${_i}"
       _c=$((${_c} + 1))
     done
     _typename="${BASH_REMATCH[1]}"
@@ -110,7 +124,7 @@ read_xbred_func() {
 }
 
 read_xbred_declare() {
-  debug "START:read_xbred_declare"
+  xbred_debug "START:read_xbred_declare"
   # declare -r varname=${var}
   # var  Abc123  'Hello World 123' '...
   #    0 ${line} ${line}           ${line}
@@ -126,7 +140,7 @@ read_xbred_declare() {
   if [[ "${_line}" =~ $_regex ]]; then
     local _c=0
     for _i in "${BASH_REMATCH[@]}"; do
-      debug "INFO: ${_c}: ${_i}"
+      xbred_debug "INFO: ${_c}: ${_i}"
       _c=$((${_c} + 1))
     done
     local _varname="${BASH_REMATCH[2]}"
@@ -136,11 +150,11 @@ read_xbred_declare() {
     local _varvalue="${BASH_REMATCH[4]}"
     _varvalue="${_varvalue:-${BASH_REMATCH[5]}}"
     vars["${_varname}"]="${_varvalue}"
-    debug "INFO: read_xbred_declare: ${_varname}=${vars[${_varname}]}"
+    xbred_debug "INFO: read_xbred_declare: ${_varname}=${vars[${_varname}]}"
   else
     xbred_quit "Illegal line: '${line}'"
   fi
-  debug "END: read_xbred_declare"
+  xbred_debug "END: read_xbred_declare"
 }
 
 read_xbred_file() {
@@ -155,7 +169,7 @@ read_xbred_file() {
       function*)
 	local _id _type _sinks _key _interpreter _packedtask
 	read -r _id _type _sinks _key _interpreter _packedtask <<< $(read_xbred_func "$_line")
-	debug "INFO: id=${_id},type=${_type},sinks=${_sinks},key=${_key},interpreter=${_interpreter},packedtask=${_packedtask}"
+	xbred_debug "INFO: id=${_id},type=${_type},sinks=${_sinks},key=${_key},interpreter=${_interpreter},packedtask=${_packedtask}"
 	if [ ${tasktype[${_id}]+_} ]; then
 	  xbred_quit "The key ${_id} is defined more than once"
 	fi
@@ -215,7 +229,7 @@ currentkey() {
 get_sinks() {
   local _sinks
   IFS=" " read -ra _sinks <<< "${sinks[${1}]}"
-  debug "INFO: get_sinks: ${_sinks[@]}"
+  xbred_debug "INFO: get_sinks: ${_sinks[@]}"
   echo ${_sinks[@]}
 }
 
@@ -245,7 +259,7 @@ num_sinks() {
 # $1 source side task name
 # $2 sink side task name
 requires_keyconverter() {
-  debug "INFO: requires_keyconverter: \$1=${1}, \$2=${2}"
+  xbred_debug "INFO: requires_keyconverter: \$1=${1}, \$2=${2}"
   if [ "$2" == "-" ]; then
     return 0
   elif [ "${key[$1]}" == "${key[$2]}" ]; then
@@ -266,15 +280,15 @@ requires_keyconverter() {
 requires_sort_on_out() {
   local _num_sinks=$(num_sinks $1)
   if [ "${_num_sinks}" -gt 1 ]; then
-    debug "INFO: requires_sort_on_out: NO: more than one sinks (${_num_sinks})"
+    xbred_debug "INFO: requires_sort_on_out: NO: more than one sinks (${_num_sinks})"
     return 0
   fi
   local _s="${sinks[$1]}"
   if [[ "${_s}" == "-" || ! "${tasktype[${_s}]}" == "R" ]]; then
-    debug "INFO: requires_sort_on_out: NO: non-R sink"
+    xbred_debug "INFO: requires_sort_on_out: NO: non-R sink"
     return 0
   fi
-    debug "INFO: requires_sort_on_out: YES"
+    xbred_debug "INFO: requires_sort_on_out: YES"
   return 1
 }
 
@@ -287,7 +301,7 @@ requires_sort_on_out() {
 # $2 sink side task name
 # $3 task id for keyconverter
 compose_keyconverter() {
-  debug "START: compose_keyconverter: \$1='$1' \$2='$2'"
+  xbred_debug "START: compose_keyconverter: \$1='$1' \$2='$2'"
   local _logfile="${logdir}/converter-${1}-${2}.log"
   local _k1="${key[$1]}"
   if [[ "${_k1}" == "-" ]]; then
@@ -298,7 +312,7 @@ compose_keyconverter() {
     _k2=1
   fi
   local _cmd="bred -e ${_logfile} -c ${_k1} -s ${_k2} -M map -I \"sh -c\" -r 'cat'|"
-  debug "END: compose_keyconverter: ${_cmd}"
+  xbred_debug "END: compose_keyconverter: ${_cmd}"
 }
 
 compose_single_task() {
@@ -315,12 +329,12 @@ compose_single_task() {
   local _tmp_file=$(mktemp)
   local _task
   IFS=$'\n' _task=($(unpack_arr "${task[${1}]}"))
-  debug "INFO:compose_single_task(tmp_file):${_tmp_file}"
-  debug "INFO:compose_single_task(packed):${task[${1}]}"
-  debug "INFO:compose_single_task(unpacked):${_task}"
+  xbred_debug "INFO:compose_single_task(tmp_file):${_tmp_file}"
+  xbred_debug "INFO:compose_single_task(packed):${task[${1}]}"
+  xbred_debug "INFO:compose_single_task(unpacked):${_task}"
   local _i
   for _i in "${_task[@]}"; do
-    debug "INFO:compose_single_task(loop):${_i}"
+    xbred_debug "INFO:compose_single_task(loop):${_i}"
     printf "%s\n" ${_i}>> "${_tmp_file}"
   done
 
@@ -342,7 +356,7 @@ compose_single_task() {
 }
 
 compose_task() {
-  debug "START: compose_task: '$1'"
+  xbred_debug "START: compose_task: '$1'"
   local _i
   local _num_sinks=0
   local _cmd=""
@@ -352,7 +366,7 @@ compose_task() {
     xbred_quit "No sink was defined for task ${1}."
   elif [[ "${_num_sinks}" == 1 ]]; then
     local _s="${sinks[${1}]}"
-    debug "INFO: compose_task: output of '$1' is cascaded to a single sink '${sinks[${1}]}'"
+    xbred_debug "INFO: compose_task: output of '$1' is cascaded to a single sink '${sinks[${1}]}'"
     if [ "${_s}" == "-" ]; then
       _cmd="$(compose_single_task ${1}) > ${bredout} &"
     else
@@ -362,9 +376,9 @@ compose_task() {
     local _sinks=$(get_sinks "${1}")
     local _tee="tee"
     # $_s for a sink
-    debug "INFO: compose_task: output of '$1' is cascaded to multiple sinks '${_sinks[@]}'"
+    xbred_debug "INFO: compose_task: output of '$1' is cascaded to multiple sinks '${_sinks[@]}'"
     for _s in ${_sinks[@]}; do
-      debug "INFO: compose_task: ${_s}"
+      xbred_debug "INFO: compose_task: ${_s}"
       requires_keyconverter "${1}" "${_s}"
       local _ret=$?
       local _keyconverter=""
@@ -376,22 +390,26 @@ compose_task() {
     done
     _cmd="$(compose_single_task ${1}) | ${_tee} > /dev/null"
   fi
-  debug "END: compose_task: '$1': '${_cmd}'"
+  xbred_debug "END: compose_task: '$1': '${_cmd}'"
   echo "${_cmd}"
 }
 
 exec_single_task() {
-  debug "START: exec_single_task"
+  xbred_debug "START: exec_single_task"
   local _cmd="$(compose_single_task ${1})"
-  debug "END: exec_single_task: '${_cmd}'"
+  xbred_debug "END: exec_single_task: '${_cmd}'"
   eval "${_cmd}"
+  error_check
+  return $?
 }
 
 exec_task() {
-  debug "START: exec_task: '$1'"
+  xbred_debug "START: exec_task: '$1'"
   local _cmd="$(compose_task ${1})"
-  debug "END: exec_task: '$1' '${_cmd}'"
+  xbred_debug "END: exec_task: '$1': '${_cmd}'"
   eval "${_cmd}"
+  error_check
+  return $?
 }
 
 ####
@@ -452,7 +470,7 @@ parse_opts() {
   ##
   # Validations
   # -k (bredtask)
-  debug "bredtask=${bredtask}"
+  xbred_debug "bredtask=${bredtask}"
   if [[ "$bredtask" =~ [^a-zA-Z0-9] ]]; then
     quit "Task name can contain only a-zA-Z0-9"
   fi
@@ -482,8 +500,8 @@ main() {
   declare -A task
   declare -A connected
   declare -A vars
-  debug "START: main: args='${@}'"
-  debug "INFO: main: ${BRED_CORE}"
+  xbred_debug "START: main: args='${@}'"
+  xbred_debug "INFO: main: ${BRED_CORE}"
 
   # read records from job definition file
   read_xbred_file "${xbredfile}" $(dirname "$xbredfile")
@@ -493,27 +511,32 @@ main() {
   # Dirty trick to check if an associative array has a key '$firsttask'
   [[ -n "${tasktype[$firsttask]+isset}" ]] || quit "Task '$firsttask' is not defined."
   numtasks=$(count_tasks_in_xbred_file ${firsttask})
-  debug "INFO: main: firsttask=${firsttask} numtasks(effective)=${numtasks}"
+  xbred_debug "INFO: main: firsttask=${firsttask} numtasks(effective)=${numtasks}"
+  local _exitcode=99
   if [ "$jobmode" == "normal" ]; then  
     # start pipleline
     msg "starting pipeline"
     mkfifo "${bredout}"
-    read_stdin | exec_task "${firsttask}" 
+    read_stdin | exec_task "${firsttask}"
+    _exitcode=$?
     cat "${bredout}"
     rm "${bredout}"
     msg "done"
   elif [ "$jobmode" == "single" ]; then
     read_stdin | exec_single_task "${firsttask}"
+    # error_check
+    _exitcode=$?
   else
     quit "Unsupported job execution mode '$jobmode' is specified."
   fi
-  debug "END: main"
+  xbred_debug "END: main"
+  return ${_exitcode}
 }
 
 ####
 # Writes a debug message
-debug() {
-  if [ "${BRED_DEBUG:-off}" == "on" ]; then
+xbred_debug() {
+  if [ "${XBRED_DEBUG:-off}" == "on" ]; then
     echo "${prog}: DEBUG: ${1}" >&2
   fi
 }
@@ -523,3 +546,5 @@ BRED_CORE="$(dirname $(readlink -e $0))/bred-core"
 xbredfile=(stdin)
 xbredfile_linenum=0
 main $@
+exit $?
+
