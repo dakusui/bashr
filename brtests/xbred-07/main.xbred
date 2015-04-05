@@ -1,0 +1,15 @@
+#!/usr/local/bin/xbred
+
+####
+# A file to test if xbred's error handling. Syntax error should be reported on L.13
+####
+
+####
+#          Id: main
+#        Type: map
+# Interpreter: sh
+#         Key: 1
+#       Sinks: -
+*function map main(sh,1,-) inline:<<EOF
+  cat -n
+EOF
