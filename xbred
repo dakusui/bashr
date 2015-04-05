@@ -32,6 +32,13 @@ debug() {
 }
 
 ####
+# Quits with a given message and line number in .xbred file.
+xbred_quit() {
+  echo "${prog}: ${xbredfile#$PWD/}: ${xbredfile_linenum}: ${1}" >&2
+  exit 1
+}
+
+####
 # Reads a function (job) from a xbred file
 read_xbred_func() {
   local _line=$1
@@ -58,6 +65,7 @@ read_xbred_func() {
       local _tail="${BASH_REMATCH[5]}"
       local _next
       while read -r _next ; do
+	xbredfile_linenum=$((xbredfile_linenum+1))	# Increment line number
 	if [[ "${_next}" == "${_endmark}" ]]; then
 	  break
 	fi
@@ -66,7 +74,7 @@ read_xbred_func() {
       local _i _c=0
     fi
   else
-    quit "line ${LINENO}: Illegal line: ${_line}"
+    xbred_quit "Illegal line: ${_line}"
   fi
   local _type=
   case "$_typename" in
@@ -88,7 +96,7 @@ read_xbred_func() {
     file:)
       local _filecontent=$(<${_jobdef})
       if [[ -z "${_filecontent}" ]]; then
-	quit "file not found or the file is empty ${_jobdef}"
+	xbred_quit "file not found or the file is empty ${_jobdef}"
       fi
       echo $(pack_arr $'\n' "${_filecontent[@]}")
       ;;
@@ -96,7 +104,7 @@ read_xbred_func() {
       echo $(pack_arr $'\n' "${_jobdef[@]}")
       ;;
     *)
-      quit "Unknown scheme is specified '${_scheme}'"
+      xbred_quit "Unknown scheme is specified '${_scheme}'"
       ;;
   esac
 }
@@ -123,14 +131,14 @@ read_xbred_declare() {
     done
     local _varname="${BASH_REMATCH[2]}"
     if [[ -n "${BASH_REMATCH[6]}" ]]; then
-      quit "${LINENO}: Illegal value: ${BASH_REMATCH[6]}"
+      xbred_quit "Illegal value: ${BASH_REMATCH[6]}"
     fi
     local _varvalue="${BASH_REMATCH[4]}"
     _varvalue="${_varvalue:-${BASH_REMATCH[5]}}"
     vars["${_varname}"]="${_varvalue}"
     debug "INFO: read_xbred_declare: ${_varname}=${vars[${_varname}]}"
   else
-    quit "${LINENO}: Illegal line: '${line}'"
+    xbred_quit "Illegal line: '${line}'"
   fi
   debug "END: read_xbred_declare"
 }
@@ -139,8 +147,8 @@ read_xbred_file() {
   local _line
   while read -r _line
   do
-    # Ignore lines which start with '#'
-    if [[ "$_line" == "#"* || -z "$_line" ]]; then
+    xbredfile_linenum=$((xbredfile_linenum+1))	# Increment line number
+    if [[ "$_line" == "#"* || -z "$_line" ]]; then # Ignore lines which start with '#'
       continue
     fi
     case "${_line}" in
@@ -149,7 +157,7 @@ read_xbred_file() {
 	read -r _id _type _sinks _key _interpreter _packedtask <<< $(read_xbred_func "$_line")
 	debug "INFO: id=${_id},type=${_type},sinks=${_sinks},key=${_key},interpreter=${_interpreter},packedtask=${_packedtask}"
 	if [ ${tasktype[${_id}]+_} ]; then
-	  quit "line ${LINENO}: The key ${_id} is defined more than once"
+	  xbred_quit "The key ${_id} is defined more than once"
 	fi
 	tasktype[${_id}]=${_type}
 	sinks[${_id}]=${_sinks//\;/ }
@@ -162,7 +170,7 @@ read_xbred_file() {
 	read_xbred_declare "${_line}"
 	;;
       *)
-	quit "Syntax error: ${_line}"
+	xbred_quit "Syntax error: '${_line}'"
 	;;
     esac
   done <"$1"
@@ -323,7 +331,7 @@ compose_single_task() {
   elif [[ "${_tasktype}" == "L" ]]; then
     _cmd="BRED_CORE=${BRED_CORE} ${interpreter[${1}]} '${_tmp_file}'"
   else
-    quit "${prog}: line ${LINENO}: Unknown task type ${_tasktype} was specified."
+    xbred_quit "Unknown task type ${_tasktype} was specified."
   fi
   local _envvars="BRED_SELF='${xbredfile}'"
   for _i in "${!vars[@]}"; do
@@ -341,7 +349,7 @@ compose_task() {
   # count number of sinks for this task
   _num_sinks=$(num_sinks $1)
   if [[ "${_num_sinks}" -le 0 ]]; then
-    quit "${prog}: line ${LINENO}: No sink was defined for task ${1}."
+    xbred_quit "No sink was defined for task ${1}."
   elif [[ "${_num_sinks}" == 1 ]]; then
     local _s="${sinks[${1}]}"
     debug "INFO: compose_task: output of '$1' is cascaded to a single sink '${sinks[${1}]}'"
@@ -502,6 +510,16 @@ main() {
   debug "END: main"
 }
 
+####
+# Writes a debug message
+debug() {
+  if [ "${BRED_DEBUG:-off}" == "on" ]; then
+    echo "${prog}: DEBUG: ${1}" >&2
+  fi
+}
+
 BRED_CORE="$(dirname $(readlink -e $0))/bred-core"
 . ${BRED_CORE}
+xbredfile=(stdin)
+xbredfile_linenum=0
 main $@
