@@ -201,10 +201,12 @@ bred_compose_task() {
   local _bredfs_read=$(bredfs_compose_read "${tmp_dir}/fs" "${host_idx:-'-'}" "${_hosts}" | base64 -w 0)
   local _usercode_path="${nodepath}/${host_idx}/shared/usercode"
   local _bredcore_path="${nodepath}/${host_idx}/shared/bred-core"
+  local _brhosts_path="${nodepath}/${host_idx}/shared/br.hosts"
   usercode=
   envvars="${envvars} BRED_CORE='${_bredcore_path}'"
   envvars="${envvars} BRED_PARTID=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\""
   envvars="${envvars} BRED_USERCODE_PATH='${_usercode_path}'"
+  envvars="${envvars} BRED_HOSTS_PATH='${_brhosts_path}'"
   envvars="${envvars} BREDFS_INIT='${_bredfs_init}'"
   envvars="${envvars} BREDFS_WRITE='${_bredfs_write}'"
   envvars="${envvars} BREDFS_READ='${_bredfs_read}'"
@@ -324,6 +326,14 @@ bred_setup_shared_resources() {
   mkdir -p "${_shared_dir}"
   echo "${_usercode}" > "${_shared_dir}/usercode"
   cp "$(dirname $0)/bred-core" "${_shared_dir}/"
+  local _each
+  truncate -s 0 "${_shared_dir}/br.hosts"
+  debug "INFO: bred_setup_shared_resources: (begin for)"
+  for _each in ${hosts}; do
+    debug "INFO: bred_setup_shared_resources: each=${_each}"
+    echo "${_each}"
+  done >> "${_shared_dir}/br.hosts"
+  debug "INFO: bred_setup_shared_resources: (end for)"
   rsync -r "${_shared_dir}"  "${_host}":"$(dirname ${_shared_dir})/"
 }
 

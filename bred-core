@@ -53,6 +53,7 @@ bred_load_brhosts() {
   else
     local _brhostsfile="/etc/br.hosts"
     [[ -e "$HOME/.br.hosts" ]] && _brhostsfile="$HOME/.br.hosts"
+    _brhostsfile="${BRED_HOSTS_PATH:-$_brhostsfile}"
     echo `cat ${_brhostsfile}`
   fi
 }
