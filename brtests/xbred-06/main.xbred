@@ -1,0 +1,17 @@
+#!/usr/local/bin/xbred
+
+declare var1=value1
+declare var2='value2'
+declare var3='value3.1 value3.2'
+
+####
+#          Id: main
+#        Type: map
+# Interpreter: sh
+#         Key: 1
+#       Sinks: -
+function map main(sh,1,-) inline:<<EOF
+  echo $var1
+  echo $var2
+  echo $var3
+EOF
