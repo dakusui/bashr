@@ -386,7 +386,7 @@ bred_executejob() {
     bred_setup_shared_resources "${host}" "${nodepath}/${host_idx}/shared" "${usercode}"
     # 2) start the task.
     ssh "$host" -n "\
-            tail -s0.1 -f --pid=$pid ${nodepath}/${host_idx}/in 2>/dev/null </dev/null \
+            tail -s0.01 -f --pid=$pid ${nodepath}/${host_idx}/in 2>/dev/null </dev/null \
                     $task \
                     | nc -q0 -l -p $port_in >&/dev/null &"
     
@@ -395,7 +395,9 @@ bred_executejob() {
     # our local forwarders
     debug "bred: bred_executejob: INFO: for (2)"
     nc "${host}" "${port_in}" >"${jobpath}/in/${host_idx}" &
+    debug "bred: bred_executejob: INFO: inbound connected process: $(lsof -t -i TCP:${port_in})"
     nc -q0 "${host}" "${port_out}" <"${jobpath}/out/${host_idx}" &
+    debug "bred: bred_executejob: INFO: outbound connected process: $(lsof -t -i TCP:${port_out})"
     # our vars
     debug "bred: bred_executejob: INFO: for (3)"
     out_files="$out_files $jobpath/out/$host_idx"
@@ -405,7 +407,7 @@ bred_executejob() {
     host_idx=$(($host_idx + 1))
     debug "bred: bred_executejob: END: for: ${host_idx}"
   done
-  
+
   ####    
   # okay, time to map
   if which brp >/dev/null; then
@@ -432,6 +434,22 @@ bred_executejob() {
   # (dakusui: abolished brm to simplify the software since i couldn't convince myself there is a big performance gain)
   # sort -m creates tmp files if too many input files are specified
   # brm doesn't do this
+  ##
+  # WARNING:  For some reason, unless in_files and remote temporary files are accessed
+  #           before the former are read,
+  #           sort/cat sometimes print nothing. This happens intermittently on
+  #           Raspberry Pi 2. We do 'ls' here.
+  local _in_files_state=$(ls -al ${in_files})
+  debug "bred: INFO: in_files: ${_in_files_state}"
+  local _each_host
+  local _host_idx=0
+  for _each_host in ${hosts}; do
+    local _node_state=$(ssh "${_each_host}" "ls -al '${nodepath}/${_host_idx}/in'")
+    _host_idx=$((${_host_idx} + 1))
+    debug "bred: bred_executejob: node state (${_host_idx}): ${_node_state}"
+  done
+  # END OF WARNING
+  ##
   if [ ${sort_on_out} == "yes" ] ; then
     eval "sort -k${sort_column},${sort_column} -m ${in_files} ${sort_opt} ${output:+| pv >$output}"
   else
