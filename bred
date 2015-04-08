@@ -102,7 +102,7 @@ bred_gen_job_idx() {
 # local
 bred_parseopt() {
   LC_ALL=${LC_ALL:-""}
-  base_port=8192
+  baseport=8192
   job_idx=-1
   mode='compat'
   interpreter='bash'
@@ -354,7 +354,7 @@ bred_executejob() {
   local jobpath="$tmp_dir/jm/${job_idx}/job"
   local nodepath="$tmp_dir/jm/${job_idx}/nodes"
   local num_hosts=$(($(echo "$hosts" | wc -w)))
-  local port_in=$(($base_port + $num_hosts * $job_idx * 2))
+  local port_in=$(($baseport + $num_hosts * $job_idx * 2))
   local port_out=$(($port_in + 1))
   local host_idx=0
   local out_files=
