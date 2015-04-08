@@ -7,6 +7,18 @@
 #
 #                                                      dakusui@gmail.com
 #
+#   Apr/8/2015 Changes from previous version:
+#   * Introduced "bredfs" (bred's file system)
+#   * Introduced "conf" file. 
+#   * Introduced a mechanism to determine unused job number (and port numbers
+#     to be used for the job)
+#   * Removed -p (base port option) - use conf file entry 'baseport'
+#   * Removed -t (tmp dir option) - use conf file entry 'sorttmpdir' for sort. see also workdir, jmdir, and fsdir.
+#   * Removed -S (buffer memory for sort) - use conf file entry 'sortmem' and/or 'defaultsortmem'
+#   * Removed -j (job id option) - no alternative
+#   * CAUTION: "conf" file is 'sourced' and you can do anything. You must
+#              understand what you are doing when you change it.
+# 
 #   Feb/26/2015 Changes from 'bashreduce':
 #   * Abolished 'brm': I gave up making it consistent with 'sort -m'.
 #   * Created 'map' and 'reduce' behaviour modes, which allow you to perform
@@ -43,12 +55,9 @@ showhelp() {
   echo   "  -e: error file, default = stderr"
   echo   "  -r: userfunc function, default = identity"
   echo   "  -f: read userfunc from a file (yes/no), default = no"
-  echo   "  -t: tmp dir to use, default = $HOME/.bred"
-  echo   "  -S: memory to use for 'S'ort, default = 256M"
   echo   "  -s: column to 's'ort(s) on reduce (and following merge). , default is equal to -c "
   echo   "  -T: option given to sor'T'(s) on reduce (and following merge), default is nothing"
   echo   "  -O: perform sort on output, ignored in 'compat' mode., default = yes"
-  echo   "  -v: verbose mode. default = no"
   echo   "  -h: this help message"
   exit 2
 } 
@@ -102,28 +111,22 @@ bred_gen_job_idx() {
 # local
 bred_parseopt() {
   LC_ALL=${LC_ALL:-""}
-  baseport=8192
   job_idx=-1
   mode='compat'
   interpreter='bash'
-  hosts=
   mapcolumn=1
   userfunc=
   input=
   output=
   error=
-  tmp_dir=${HOME}/.bred
-  sort_mem=256M
   sort_column=
   sort_on_out="yes"
   sort_opt=
-  verbose="no"
   local _fromfile="no"
   
-  while getopts "m:p:j:M:I:c:f:r:i:o:e:t:S:s:T:O:v:h" name; do
+  while getopts "m:p:M:I:c:f:r:i:o:e:s:T:O:v:h" name; do
     case "$name" in
       m)  hosts=$OPTARG;;
-      p)  baseport=$OPTARG;;
       M)  mode=$OPTARG;;
       I)  interpreter=$OPTARG;;
       c)  mapcolumn=$OPTARG;;
@@ -132,19 +135,16 @@ bred_parseopt() {
       i)  input=$OPTARG;;
       o)  output=$OPTARG;;
       e)  error=$OPTARG;;
-      t)  tmp_dir=$OPTARG;;
-      S)  sort_mem=$OPTARG;;
       s)  sort_column=$OPTARG;;
       O)  sort_on_out=$OPTARG;;
       T)  sort_opt=$OPTARG;;
-      v)  verbose="yes";;
       h)  showhelp $0;;
       [?])  usage $0;;
     esac
   done
   # job_idx
   local _nextid=-1
-  local _jid_dir="${tmp_dir}/jm"
+  local _jid_dir="${jmdir}"
   if [[ "${_fromfile}" == "yes" ]]; then
     debug "before--->${userfunc}:"
     userfunc=`cat "${userfunc}"`
@@ -158,10 +158,9 @@ bred_parseopt() {
   debug "retrieved job id: ${job_idx:?Failed to get job id. }: ${_jid_dir}"
   echo "$$" > "${_jid_dir}/${job_idx}/pid"
 
-  hosts=$(bred_load_brhosts "$hosts")
   sort_column=${sort_column:-$mapcolumn}
   # check if 'hosts' is set.
-  hosts=${hosts:?"`basename $0`: must specify hosts with -m or provide ~/.br.hosts or /etc/br.hosts"}
+  hosts=${hosts:?"`basename $0`: must specify hosts with -m or provide ~/.bred/bred.conf"}
   case "$mode" in
     compat|map|reduce)
       ;;
@@ -173,10 +172,25 @@ bred_parseopt() {
   job_id=${jobid:-"`uuidgen`"}
 }
 
+###
+# Prints sort buffer memory for specified host.
+# The host is specified by 'index' not the name.
+# * Parameters
+# - _host_idx
+bred_get_sortmem() {
+  local _hostname="${hosts[$1]}"
+  if [[ -n "${sortmem[_hostname]-isset}" ]] then
+    echo "${sortmem[_hostname]}"
+    return 0
+  fi
+  echo "${defaultsortmem}"
+  return 0
+}
+
 # * in
 #   (params)     mode, host_idx, nodepath
 #   (enviromnet) LC_ALL
-#   (from opt)   mapcolumn, interpreter, userfunc, sort_mem, tmp_dir
+#   (from opt)   mapcolumn, interpreter, userfunc, sortmem, sorttmpdir
 # * out
 #   task,usercode
 # * local
@@ -190,15 +204,16 @@ bred_compose_task() {
   
   sorter="2>$sorter_errolog"
   if [ "$sort_on_out" == "yes" ] ; then
-    sorter="| LC_ALL='$LC_ALL' sort -S$sort_mem -T$tmp_dir -k$sort_column,$sort_column $sort_opt  2>$sorter_errolog"
+    local _sortmem=$(bred_get_sortmem "$host_idx")
+    sorter="| LC_ALL='$LC_ALL' sort -S$_sortmem -T$sorttmpdir -k$sort_column,$sort_column $sort_opt  2>$sorter_errolog"
   fi
   
   local envvars=
   local _namenode=$(hostname)
   local _hosts="${hosts}"
-  local _bredfs_init=$(bredfs_compose_init "${tmp_dir}/fs" | base64 -w 0)
-  local _bredfs_write=$(bredfs_compose_write "${_namenode}" '${tmp_dir}/fs' | base64 -w 0)
-  local _bredfs_read=$(bredfs_compose_read "${tmp_dir}/fs" "${host_idx:-'-'}" "${_hosts}" | base64 -w 0)
+  local _bredfs_init=$(bredfs_compose_init "${fsdir}" | base64 -w 0)
+  local _bredfs_write=$(bredfs_compose_write "${_namenode}" '${fsdir}' | base64 -w 0)
+  local _bredfs_read=$(bredfs_compose_read "${fsdir}" "${host_idx:-'-'}" "${_hosts}" | base64 -w 0)
   local _usercode_path="${nodepath}/${host_idx}/shared/usercode"
   local _bredcore_path="${nodepath}/${host_idx}/shared/bred-core"
   local _brhosts_path="${nodepath}/${host_idx}/shared/br.hosts"
@@ -343,7 +358,7 @@ bred_setup_shared_resources() {
 # variables:
 # * read
 #   (from opt) hosts, mode, mapcolumn, userfunc, solrt_column
-#   (globals)  sorter, tmp_dir
+#   (globals)  sorter, jmdir
 # * write
 #   (none)
 # * local
@@ -351,8 +366,8 @@ bred_setup_shared_resources() {
 bred_executejob() {
   AWK="/usr/bin/awk"
   # okay let's get started!  first we need a name for our job
-  local jobpath="$tmp_dir/jm/${job_idx}/job"
-  local nodepath="$tmp_dir/jm/${job_idx}/nodes"
+  local jobpath="$jmdir/${job_idx}/job"
+  local nodepath="$jmdir/${job_idx}/nodes"
   local num_hosts=$(($(echo "$hosts" | wc -w)))
   local port_in=$(($baseport + $num_hosts * $job_idx * 2))
   local port_out=$(($port_in + 1))
@@ -477,7 +492,7 @@ bred_executejob() {
     for host in ${hosts}; do
       ssh "$host" "rm -fr ${nodepath:?'node path isn't set''}"
     done
-    rm -fr "${tmp_dir:?something goes wrong!}/jm/${job_idx:?something goes wrong!}"
+    echo "Disabled rm command line" rm -fr "${jmdir:?something goes wrong!}/${job_idx:?something goes wrong!}" >&2
   fi
   
   ####    
@@ -486,6 +501,18 @@ bred_executejob() {
 }
 
 main() {
+  ####
+  # Configurable parameters and their default values. Those are defined
+  # in bred-core
+  # baseport=8192
+  # hosts=(localhost localhost localhost localhost)
+  # workdir=/tmp/bred
+  # fsdir=${workdir}/fs
+  # jmdir=${workdir}/jm
+  # sorttmpdir=${workdir}/tmp
+  # sortmem[localhost]=32M
+  # defaultsortmem=256K
+ 
   . "$(dirname $0)/bred-core"
   prog="`basename $0`"
   bred_parseopt "$@"
