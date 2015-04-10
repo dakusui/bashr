@@ -69,7 +69,7 @@ bredfs_compose_write() {
   local _fsbase=${2:?"ERR:_fsbase was not given"}
   local _namenode=(${3:?"ERR:_conffile=${_conffile}, _namenode=${_namenode}"})
 
-  local _f='nl -w 1 -b a -s " " ${APPEND} | ssh -o SendEnv=TO localhost "bred -C '"${_conffile}"'-r '\''cat >> '${_fsbase}'/\${BRED_PARTID}/${TO}'\'' -T '\''-n'\'' -c '\''1'\''"'
+  local _f='nl -w 1 -b a -s " " ${APPEND} | ssh -o SendEnv=TO localhost "bred -C '"${_conffile}"' -r '\''cat >> '${_fsbase}'/\${BRED_PARTID}/${TO}'\'' -T '\''-n'\'' -c '\''1'\''"'
   printf "${_f}" ${_namenode} ${_fsbase} '${TO}'
 }
 
@@ -121,15 +121,13 @@ bredfs_exportenv() {
     #   defaultsortmem=256K
     source "${_conffile}"
   else
-    echo "Config file '${_conffile}' was not found.($1)($2)" >& 2
+    echo "Config file '${_conffile}' was not found from $PWD.($1)($2)" >& 2
     exit 1
   fi
   local _hosts="${hosts[@]}"
   local _namenode="${namenode}"
   local _fsbase="${fsdir}"
 
-  echo "_conffile=${_conffile}" >& 2
-  echo "_fsbase=${_fsbase}" >& 2
   export BREDFS_INIT=$(bredfs_compose_init "${_conffile}" "${_fsbase}" | base64 -w 0)
   export BREDFS_WRITE=$(bredfs_compose_write "${_conffile}" "${_fsbase}" "${_namenode}" | base64 -w 0)
   export BREDFS_READ=$(bredfs_compose_read "${_fsbase}" "${_host_idx:-'-'}" "${_hosts}" | base64 -w 0)
@@ -167,5 +165,4 @@ bredfs() {
 
 # Export the environment variables
 prog=${0}
-debug ": BRED_CONF=${BRED_CONF}"
 bredfs_exportenv "${BRED_PARTID:-'-'}" "${BRED_CONF:-${HOME}/.bred/bred.conf}"

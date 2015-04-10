@@ -2,10 +2,10 @@
 
 ####
 # Global variables
-BRED_BASEDIR="$HOME/.bred"
-DIRNAME=$(dirname $(dirname $(readlink -e $0)))
+BRED_BASEDIR="/tmp/bred"
+DIRNAME=$(dirname $(dirname $0))
 SUT="${DIRNAME}/bred"
-CONFFILE="${DIRNAME}/bred.conf"
+CONFFILE="$(dirname $(readlink -e $0))/bred.conf"
 NUM_TOTAL=0
 NUM_PASSED=0
 
@@ -161,7 +161,7 @@ function bredtest_1reducer_sort_on_out_no() {
 2 MAIN 01 C'
   elif [ $1 == 'actual' ]; then
     printf "03 A\n02 A\n01 B\n01 C\n" | \
-      "$SUT"-C "${CONFFILE}"  -m "localhost" -M reduce -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' -O no 2>/dev/null | grep 'MAIN' | sort
+      "$SUT" -C "${CONFFILE}" -m "localhost" -M reduce -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' -O no 2> /dev/null | sort | grep 'MAIN'
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -195,7 +195,7 @@ function bredtest_2reducersK3() {
 1 MAIN 02 A zz'
   elif [ $1 == 'actual' ]; then
     printf "03 A x\n02 A zz\n01 B z\n01 C y\n" | \
-      "$SUT" -C "${CONFFILE}"　-c 3 -m "localhost localhost" -M reduce -s 5 -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'  2>/dev/null | grep "MAIN"
+      "$SUT" -C "${CONFFILE}" -c 3 -m "localhost localhost" -M reduce -s 5 -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null | grep "MAIN"
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -214,7 +214,7 @@ function bredtest_1mapper() {
 5 END'
   elif [ $1 == 'actual' ]; then
     printf "03 A\n02 A\n01 B\n01 C\n" | \
-      "$SUT" -C "${CONFFILE}" -m "localhost" -M map -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' # 2>/dev/null
+      "$SUT" -C "${CONFFILE}" -m "localhost" -M map -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -377,7 +377,7 @@ function bredtest_bredfs_init() {
 /fs/2/path/to/store
 /fs/3/path/to/store'
   elif [ $1 == 'actual' ]; then
-    BRED_CONF="$(dirname $SUT)/bred.conf" . "$(dirname $SUT)/bred-core"
+    BRED_CONF="${CONFFILE}" . "$(dirname $SUT)/bred-core"
     _format_bredfs
     find "${BRED_BASEDIR}/fs" -type f 2>/dev/null
     echo "===="
@@ -403,8 +403,7 @@ function bredtest_bredfs_write() {
 /fs/2/path/to/store:1 A HELLO
 /fs/3/path/to/store:4 B WORLD'
   elif [ $1 == 'actual' ]; then
-    BRED_CONF="$(dirname $SUT)/bred.conf"
-    . "$(dirname $SUT)/bred-core"
+    BRED_CONF="${CONFFILE}" . "$(dirname $SUT)/bred-core"
     _format_bredfs
     local _tmp=$(mktemp)
     echo 'A HELLO
@@ -443,8 +442,7 @@ A HELLO
 A WORLD
 B HELLO'
   elif [ $1 == 'actual' ]; then
-    BRED_CONF="$(dirname $SUT)/bred.conf"
-    . "$(dirname $SUT)/bred-core"
+    BRED_CONF="${CONFFILE}" . "$(dirname $SUT)/bred-core"
     _format_bredfs
     local _tmp=$(mktemp)
     echo 'A HELLO

@@ -46,7 +46,6 @@ showhelp() {
   echo   "bred. bashreduce enhanced.  Map an input file to many hosts, sort/reduce, merge"
   echo   "  -m: hosts to use, can repeat hosts for multiple cores"
   echo   "      default hosts from ~/.br.hosts or /etc/br.hosts"
-  echo   "  -p: base port, default = 8192"
   echo   "  -M: mode ('map', 'reduce', 'compat'), default = 'compat'"
   echo   "  -I: interpreter. ignored if 'compat' mode is used, default = 'bash'"
   echo   "  -c: column to partition, default = 1 (1-based)"
@@ -126,9 +125,9 @@ bred_parseopt() {
   hosts_fromopt=
   local _fromfile="no"
   
-  while getopts "m:p:M:I:c:f:r:i:o:e:s:T:O:C:h" name; do
+  while getopts "m:M:I:c:f:r:i:o:e:s:T:O:C:h" name; do
     case "$name" in
-      m)  IFS=" " read -ra hosts_fromopt <<< "${OPTARG}";;
+      m)  hosts_fromopt=${OPTARG};;
       M)  mode=$OPTARG;;
       I)  interpreter=$OPTARG;;
       c)  mapcolumn=$OPTARG;;
@@ -197,6 +196,7 @@ bred_get_sortmem() {
 # * local
 #   sorter, envvars
 bred_compose_task() {
+  debug "bred_compose_task: START"
   # mode: 'map', 'reduce', 'compat'
   local mode=$1
   local host_idx=$2
@@ -212,31 +212,35 @@ bred_compose_task() {
   local envvars=
   local _namenode=${namenode}
   local _hosts="${hosts}"
-  local _bredfs_init=$(bredfs_compose_init "${fsdir}" | base64 -w 0)
-  local _bredfs_write=$(bredfs_compose_write "${_namenode}" '${fsdir}' | base64 -w 0)
-  local _bredfs_read=$(bredfs_compose_read "${fsdir}" "${host_idx:-'-'}" "${_hosts}" | base64 -w 0)
+#   local _bredfs_init=$(bredfs_compose_init "${fsdir}" | base64 -w 0)
+#   local _bredfs_write=$(bredfs_compose_write "${_namenode}" '${fsdir}' | base64 -w 0)
+#   local _bredfs_read=$(bredfs_compose_read "${fsdir}" "${host_idx:-'-'}" "${_hosts}" | base64 -w 0)
   local _usercode_path="${nodepath}/${host_idx}/shared/usercode"
   local _bredcore_path="${nodepath}/${host_idx}/shared/bred-core"
   local _bredconf_path="${nodepath}/${host_idx}/shared/bred.conf"
   local _brhosts_path="${nodepath}/${host_idx}/shared/br.hosts"
+  debug "bred_compose_task: INFO: (1)"
   usercode=
   envvars="${envvars} BRED_CORE='${_bredcore_path}'"
   envvars="${envvars} BRED_CONF='${_bredconf_path}'"
   envvars="${envvars} BRED_PARTID=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\""
   envvars="${envvars} BRED_USERCODE_PATH='${_usercode_path}'"
   envvars="${envvars} BRED_HOSTS_PATH='${_brhosts_path}'"
-  envvars="${envvars} BREDFS_INIT='${_bredfs_init}'"
-  envvars="${envvars} BREDFS_WRITE='${_bredfs_write}'"
-  envvars="${envvars} BREDFS_READ='${_bredfs_read}'"
+#  envvars="${envvars} BREDFS_INIT='${_bredfs_init}'"
+#  envvars="${envvars} BREDFS_WRITE='${_bredfs_write}'"
+#  envvars="${envvars} BREDFS_READ='${_bredfs_read}'"
+  debug "bred_compose_task: INFO: (2)"
   local _i
   for _i in $(set -o posix ; set | grep -E "^BREDVAR_.*$"); do
     _i="${_i#BREDVAR_}"
     debug "bred_compose_task: INFO: ${_i}"
     envvars="${envvars} ${_i}"
   done
+  debug "bred_compose_task: INFO: (3)"
   
   case "$mode" in
     map)
+      debug "bred_compose_task: map"
       if [[ -z "$userfunc" ]]; then
                 echo "`basename $0`: $mode is specified. must specify userfunc with -r"
                 usage $1
@@ -245,12 +249,14 @@ bred_compose_task() {
       task="| ( $envvars ${interpreter} '${_usercode_path}' $sorter ) "
       ;;
     reduce)
+      debug "bred_compose_task: reduce"
       if [[ -z "$userfunc" ]]; then
         echo "`basename $0`: ${mode} is specified. must specify userfunc with -r"
         usage $1
       fi
       case ${interpreter} in
         "awk-native")
+	  debug "bred_compose_task: reduce: awk-native"
           usercode='BEGIN {
                         bred_firsttime=1;
                         bred_key=FS;
@@ -293,6 +299,7 @@ bred_compose_task() {
           task="| ( $envvars $AWK -f '${_usercode_path}' 2> $usercode_errlog $sorter ) "
           ;;
         *)
+	  debug "bred_compose_task: reduce: *"
           local _usercode_executor='BEGIN {
                         cmd=sprintf("%s %c%s%c", ENVIRON["BRED_INTERPRETER"], 39, ENVIRON["BRED_USERCODE_PATH"], 39);
                         firsttime=1;
@@ -335,6 +342,7 @@ bred_compose_task() {
       exit 1
       ;;
   esac
+  debug "bred_compose_task: END"
 }
 
 bred_dump_conf() {
@@ -342,7 +350,7 @@ bred_dump_conf() {
   echo "hosts=(${hosts[@]})"
   echo "namenode=${namenode}"
   echo "workdir=${workdir}"
-  echo "fsdir=${fsdir}/fs"
+  echo "fsdir=${fsdir}"
   echo "jmdir=${jmdir}"
   echo "sorttmpdir=${sorttmpdir}"
   local _i
@@ -397,7 +405,7 @@ bred_executejob() {
   # now, for each host, set up in and out fifos (and a netcat for each), and ssh to each host to set up workers listening on netcat
   mkdir -p "${jobpath}/"{in,out}
   for host in "${hosts[@]}"; do
-    debug "bred: bred_executejob: BEGIN: for"
+    debug "bred_executejob: BEGIN: for"
     ####
     # set up communication path
     # 1) master side
@@ -412,11 +420,12 @@ bred_executejob() {
     #    let's start the remote 'nc' listener and get the pid of it
     local pid=$(ssh -n "$host" "nc -l -p $port_out >${nodepath}/${host_idx}/in 2>/dev/null </dev/null & jobs -l" | awk {'print $2'})
     
-    debug "bred_executejob: INFO: for (1): ${jobpath}, ${nodepath}"
+    debug "bred_executejob: INFO: for (1.0): ${jobpath}, ${nodepath}"
     ####
     # start task process on remote side and connect to it to the listener
     # 1) compose 'task' component based on execution mode (map, reduce, or compat)
     bred_compose_task "$mode" "$host_idx" "${nodepath}"
+    debug "bred_executejob: INFO: for (1.1)"
     bred_setup_shared_resources "${host}" "${nodepath}/${host_idx}/shared" "${usercode}"
     # 2) start the task.
     ssh -A "$host" -n "\
@@ -550,7 +559,7 @@ main() {
   if [[ -n "${hosts_fromopt[*]}" ]]; then
     debug "main: hosts is provided from option."
     hosts=()
-    hosts=${hosts_fromopt[@]}
+    IFS=" " read -ra hosts <<< ${hosts_fromopt}
     namenode="${hosts_fromopt[0]}"
     debug "main: hosts is overridden. '${hosts[*]}'"
   fi
