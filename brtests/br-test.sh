@@ -1,6 +1,15 @@
 #!/bin/bash -u
 
 ####
+# Global variables
+BRED_BASEDIR="$HOME/.bred"
+DIRNAME=$(dirname $(dirname $(readlink -e $0)))
+SUT="${DIRNAME}/bred"
+CONFFILE="${DIRNAME}/bred.conf"
+NUM_TOTAL=0
+NUM_PASSED=0
+
+####
 # A test executor
 function exec_test() {
   NUM_TOTAL=$(($NUM_TOTAL + 1))
@@ -135,7 +144,7 @@ function bredtest_1reducer() {
 3 END'
   elif [ $1 == 'actual' ]; then
     printf "03 A\n02 A\n01 B\n01 C\n" | \
-      "$SUT" -m "localhost" -j 0 -M reduce -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'  2>/dev/null
+      "$SUT" -C "${CONFFILE}" -m "localhost" -M reduce -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'  2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -152,7 +161,7 @@ function bredtest_1reducer_sort_on_out_no() {
 2 MAIN 01 C'
   elif [ $1 == 'actual' ]; then
     printf "03 A\n02 A\n01 B\n01 C\n" | \
-      "$SUT" -m "localhost" -j 0 -M reduce -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' -O no 2>/dev/null | grep 'MAIN' | sort
+      "$SUT"-C "${CONFFILE}"  -m "localhost" -M reduce -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' -O no 2>/dev/null | grep 'MAIN' | sort
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -169,7 +178,7 @@ function bredtest_2reducers() {
 2 MAIN 01 C y'
   elif [ $1 == 'actual' ]; then
     printf "03 A x\n02 A zz\n01 B z\n01 C y\n" | \
-      "$SUT" -m "localhost localhost" -j 0 -M reduce -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null | grep "MAIN" | sort
+      "$SUT" -C "${CONFFILE}" -m "localhost localhost" -M reduce -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null | grep "MAIN" | sort
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -186,7 +195,7 @@ function bredtest_2reducersK3() {
 1 MAIN 02 A zz'
   elif [ $1 == 'actual' ]; then
     printf "03 A x\n02 A zz\n01 B z\n01 C y\n" | \
-      "$SUT" -c 3 -m "localhost localhost" -j 0 -M reduce -s 5 -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'  2>/dev/null | grep "MAIN"
+      "$SUT" -C "${CONFFILE}"　-c 3 -m "localhost localhost" -M reduce -s 5 -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}'  2>/dev/null | grep "MAIN"
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -205,7 +214,7 @@ function bredtest_1mapper() {
 5 END'
   elif [ $1 == 'actual' ]; then
     printf "03 A\n02 A\n01 B\n01 C\n" | \
-      "$SUT" -m "localhost" -j 0 -M map -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null
+      "$SUT" -C "${CONFFILE}" -m "localhost" -M map -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' # 2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -223,7 +232,7 @@ function bredtest_1mapper_sort_on_out_no() {
 5 END'
   elif [ $1 == 'actual' ]; then
     printf "03 A\n02 A\n01 B\n01 C\n" | \
-      "$SUT" -m "localhost" -j 0 -M map -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' -O no 2>/dev/null
+      "$SUT" -C "${CONFFILE}" -m "localhost" -M map -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' -O no 2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -244,7 +253,7 @@ function bredtest_2mappers() {
 4 END'
   elif [ $1 == 'actual' ]; then
     printf "03 A\n02 A\n01 B\n01 C\n" | \
-      "$SUT" -m "localhost localhost" -j 0 -M map -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null
+      "$SUT" -C "${CONFFILE}" -m "localhost localhost" -M map -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -261,7 +270,7 @@ function bredtest_default_sort_default_column() {
 03 A'
   elif [ $1 == 'actual' ]; then
     printf "03 A\n02 A\n01 B\n01 C\n" | \
-      "$SUT" -m "localhost localhost" -j 0 2>/dev/null
+      "$SUT" -C "${CONFFILE}" -m "localhost localhost" 2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -278,7 +287,7 @@ function bredtest_default_sort_2nd_column() {
 01 C'
   elif [ $1 == 'actual' ]; then
     printf "03 A\n02 A\n01 B\n01 C\n" | \
-      "$SUT" -m "localhost localhost" -j 0 -c 2 2>/dev/null
+      "$SUT" -C "${CONFFILE}" -m "localhost localhost" -c 2 2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -296,7 +305,7 @@ function bredtest_2mappersK2() {
 '
   elif [ $1 == 'actual' ]; then
     printf "03 A\n02 A\n01 B\n01 C\n" | \
-      "$SUT" -m "localhost localhost" -j 0 -c 2 -M map -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null | grep MAIN | sort -k 1,4
+      "$SUT" -C "${CONFFILE}" -m "localhost localhost" -c 2 -M map -I 'awk -f' -r 'BEGIN{i=0;print i++,"BEGIN";} //{print i++,"MAIN",$0;} END{print i++,"END";}' 2>/dev/null | grep MAIN | sort -k 1,4
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -313,7 +322,7 @@ function bredtest_compat_wordcount() {
       2 world'
   elif [ $1 == 'actual' ]; then
     printf "hello\nworld\neveryone\nhello\nhello\none\nworld" | \
-      "$SUT" -m "localhost" -r 'uniq -c' 2>/dev/null
+      "$SUT" -C "${CONFFILE}" -m "localhost" -r 'uniq -c' 2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -327,7 +336,7 @@ function bredtest_compat_wordcount_sort_on_out_disabled() {
     echo '      1 everyone'
   elif [ $1 == 'actual' ]; then
     printf "hello\nworld\neveryone\nhello\nhello\none\nworld" | \
-      "$SUT" -m "localhost" -r 'uniq -c' -O no 2> /dev/null | grep 'everyone' 
+      "$SUT" -C "${CONFFILE}" -m "localhost" -r 'uniq -c' -O no 2> /dev/null | grep 'everyone' 
   else
     echo "Invalid mode $1 is specified"
     exit 1
@@ -344,15 +353,11 @@ function bredtest_compat_wordcount_with_2reducers() {
       2 world'
   elif [ $1 == 'actual' ]; then
     printf "hello\nworld\neveryone\nhello\nhello\none\nworld" | \
-      "$SUT" -m "localhost localhost" -r 'uniq -c' 2>/dev/null
+      "$SUT" -C "${CONFFILE}" -m "localhost localhost" -r 'uniq -c' 2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
   fi
-}
-
-function _setup_bredfs() {
-  bredfs_exportenv "-" "localhost localhost localhost localhost" "${BRED_BASEDIR:?BRED_BASEDIR must be set}/fs"
 }
 
 function _format_bredfs() {
@@ -372,8 +377,7 @@ function bredtest_bredfs_init() {
 /fs/2/path/to/store
 /fs/3/path/to/store'
   elif [ $1 == 'actual' ]; then
-    . "$(dirname $SUT)/bred-core"
-    _setup_bredfs
+    BRED_CONF="$(dirname $SUT)/bred.conf" . "$(dirname $SUT)/bred-core"
     _format_bredfs
     find "${BRED_BASEDIR}/fs" -type f 2>/dev/null
     echo "===="
@@ -399,10 +403,10 @@ function bredtest_bredfs_write() {
 /fs/2/path/to/store:1 A HELLO
 /fs/3/path/to/store:4 B WORLD'
   elif [ $1 == 'actual' ]; then
-    local _tmp=$(mktemp)
+    BRED_CONF="$(dirname $SUT)/bred.conf"
     . "$(dirname $SUT)/bred-core"
-    _setup_bredfs
     _format_bredfs
+    local _tmp=$(mktemp)
     echo 'A HELLO
 B HELLO
 A WORLD
@@ -439,10 +443,10 @@ A HELLO
 A WORLD
 B HELLO'
   elif [ $1 == 'actual' ]; then
-    local _tmp=$(mktemp)
+    BRED_CONF="$(dirname $SUT)/bred.conf"
     . "$(dirname $SUT)/bred-core"
-    _setup_bredfs
     _format_bredfs
+    local _tmp=$(mktemp)
     echo 'A HELLO
 B HELLO
 A WORLD
@@ -465,12 +469,6 @@ B WORLD' > "${_tmp}"
   fi
 }
 
-BRED_BASEDIR="$HOME/.bred"
-DIRNAME=$(dirname $(dirname $0))
-SUT="$DIRNAME/bred"
-NUM_TOTAL=0
-NUM_PASSED=0
-
 function main() {
   if [[ $# > 0 ]]; then
     for each in $@ ; do
@@ -488,4 +486,5 @@ function main() {
   echo "----"
   echo "TOTAL:$NUM_PASSED  / $NUM_TOTAL"
 }
+
 main $@
