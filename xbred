@@ -446,8 +446,6 @@ count_tasks_in_xbred_file() {
 # Parses user options and assigns them to global variables that follow.
 # * bredtask
 # * jobmode   (default=normal)
-# * logdir    (default=(current directory))
-# * tmpdir    (default=/tmp)
 # * xbredfile (default=(none, mandatory))
 #
 # Parameters:
@@ -456,13 +454,10 @@ parse_opts() {
   local _name="";
   bredtask=""
   jobmode="normal"
-  logdir="$(pwd)"
-  tmpdir="/tmp"
-  while getopts "k:m:l:t" _name; do
+  while getopts "k:m" _name; do
     case "${_name}" in
       k)   bredtask=${OPTARG};;
       m)   jobmode=${OPTARG};;
-      l)   logdir=${OPTARG};;
       [?]) usage $0;;
     esac
   done
@@ -492,7 +487,13 @@ main() {
   # Initialize global variables
   prog="`basename $0`"
   parse_opts $@
-  bredout="${tmpdir}/xbred-`uuidgen`"
+  # workdir is defined in bred.{conf,testconf}
+  mkdir -p "${workdir}/xbred"
+  xbreddir=$(mktemp -d $(date  +"${workdir}/xbred/%Y%m%d-%H%M%S.XXXXX"))
+  logdir="${xbreddir}/logs"; mkdir "${logdir}"
+  tmpdir="${xbreddir}/tmp"; mkdir "${tmpdir}"
+  bredout="${tmpdir}/out"
+  msg "session directory='${xbreddir}'"
   declare -A tasktype
   declare -A sinks
   declare -A key

@@ -45,8 +45,13 @@ unpack_arr() {
   echo -n "$1" | base64 -d
 }
 
-bredcore_isddebug_enabled() {
-  if [[ "${BREDCORE_DEBUG}" == "on" ]]; then
+####
+# Checks if 'debug' is enabled:
+#
+# Returned value:
+# 0 - Enabled / 1 - Otherwise
+bredcore_isdebug_enabled() {
+  if [[ "${BREDCORE_DEBUG:-off}" == "on" ]]; then
     return 0
   fi
   return 1
@@ -141,8 +146,8 @@ bredfs_exportenv() {
   local _namenode="${namenode}"
   local _fsbase="${fsdir}"
 
-  msg "_conffile: ${_conffile}"
-  msg "_fsbase: ${_fsbase}"
+  bredcore_debug "_conffile: ${_conffile}"
+  bredcore_debug "_fsbase: ${_fsbase}"
   export BREDFS_INIT=$(bredfs_compose_init "${_conffile}" "${_fsbase}" | base64 -w 0)
   export BREDFS_WRITE=$(bredfs_compose_write "${_conffile}" "${_fsbase}" "${_namenode}" | base64 -w 0)
   export BREDFS_READ=$(bredfs_compose_read "${_fsbase}" "${_host_idx:-'-'}" "${_hosts}" | base64 -w 0)
@@ -179,12 +184,12 @@ bredfs() {
 }
 
 # Export the environment variables
-prog=${0}
+prog=$(basename ${0})
 bred_bindir=$(dirname $(readlink -e "${BASH_SOURCE}"))
 bred_conffile="${bred_bindir}/bred.conf"
 if [[ -e "${bred_bindir}/bred.testconf" ]]; then
   bred_conffile="${bred_bindir}/bred.testconf"
-  echo "WARNING: bred is now in test mode. (config=${bred_conffile} is being used)" >& 2
+  msg "WARNING: bred is now in test mode. (config=${bred_conffile} is being used)"
 fi      
   
 bredfs_exportenv "${BRED_PARTID:-'-'}" "${bred_conffile}"

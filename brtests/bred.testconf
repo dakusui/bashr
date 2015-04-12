@@ -1,7 +1,7 @@
 baseport=10000
 hosts=(localhost localhost localhost localhost)
 namenode="${hosts[0]}"
-workdir="${HOME}/.bred"
+workdir="/tmp/bred"
 fsdir="${workdir}/fs"
 jmdir="${workdir}/jm"
 sorttmpdir="${workdir}/sort"
