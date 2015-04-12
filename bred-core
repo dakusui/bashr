@@ -45,6 +45,19 @@ unpack_arr() {
   echo -n "$1" | base64 -d
 }
 
+bredcore_isddebug_enabled() {
+  if [[ "${BREDCORE_DEBUG}" == "on" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+bredcore_debug() {
+  if bredcore_isdebug_enabled ; then
+    msg "bred-core: $*"
+  fi
+}
+
 ####
 # Composes a string to initialize a file in "poorman's DFS"
 #
@@ -52,9 +65,9 @@ unpack_arr() {
 # - $1: A base directory of the local stroage of poorman's DFS
 bredfs_compose_init() {
   local _conffile="${1}"
-  local _fsbase="${2:?ERR:_conffile=${_conffile}}"
-  local _s='echo "" | bred -C "%s" -r "mkdir -p %s/\${BRED_PARTID}/$(dirname ${STORE}) ; truncate -s 0 %s/\${BRED_PARTID}/$(dirname ${STORE})/$(basename ${STORE})" -T "-n" -c 1'
-  printf "${_s}" "${_conffile}" "${_fsbase}" "${_fsbase}"
+  local _fsbase="${2:?ERR _fsbase was not given}"
+  local _s='echo "" | bred -r "mkdir -p %s/\${BRED_PARTID}/$(dirname ${STORE}) ; truncate -s 0 %s/\${BRED_PARTID}/$(dirname ${STORE})/$(basename ${STORE})" -T "-n" -c 1 '
+  printf "${_s}" "${_fsbase}" "${_fsbase}"
 }
 
 ####
@@ -67,10 +80,10 @@ bredfs_compose_write() {
   # nl -w 1 -b a ~/Documents/FSM.md | bred -r 'cat > /tmp/bredfs/${BRED_WORKER_IDX}/work/FSM.md' -T '-n' -c 1 >& /dev/null
   local _conffile="${1}"
   local _fsbase=${2:?"ERR:_fsbase was not given"}
-  local _namenode=(${3:?"ERR:_conffile=${_conffile}, _namenode=${_namenode}"})
+  local _namenode=(${3:?"ERR:_namenode was not given"})
 
-  local _f='nl -w 1 -b a -s " " ${APPEND} | ssh -o SendEnv=TO localhost "bred -C '"${_conffile}"' -r '\''cat >> '${_fsbase}'/\${BRED_PARTID}/${TO}'\'' -T '\''-n'\'' -c '\''1'\''"'
-  printf "${_f}" ${_namenode} ${_fsbase} '${TO}'
+  local _f='nl -w 1 -b a -s " " ${APPEND} | ssh -o SendEnv=TO %s "bred -r '\''cat >> '${_fsbase}'/\${BRED_PARTID}/${TO}'\'' -T '\''-n'\'' -c '\''1'\''"'
+  printf "${_f}" ${_namenode}
 }
 
 ####
@@ -128,6 +141,8 @@ bredfs_exportenv() {
   local _namenode="${namenode}"
   local _fsbase="${fsdir}"
 
+  msg "_conffile: ${_conffile}"
+  msg "_fsbase: ${_fsbase}"
   export BREDFS_INIT=$(bredfs_compose_init "${_conffile}" "${_fsbase}" | base64 -w 0)
   export BREDFS_WRITE=$(bredfs_compose_write "${_conffile}" "${_fsbase}" "${_namenode}" | base64 -w 0)
   export BREDFS_READ=$(bredfs_compose_read "${_fsbase}" "${_host_idx:-'-'}" "${_hosts}" | base64 -w 0)
@@ -165,4 +180,11 @@ bredfs() {
 
 # Export the environment variables
 prog=${0}
-bredfs_exportenv "${BRED_PARTID:-'-'}" "${BRED_CONF:-${HOME}/.bred/bred.conf}"
+bred_bindir=$(dirname $(readlink -e "${BASH_SOURCE}"))
+bred_conffile="${bred_bindir}/bred.conf"
+if [[ -e "${bred_bindir}/bred.testconf" ]]; then
+  bred_conffile="${bred_bindir}/bred.testconf"
+  echo "WARNING: bred is now in test mode. (config=${bred_conffile} is being used)" >& 2
+fi      
+  
+bredfs_exportenv "${BRED_PARTID:-'-'}" "${bred_conffile}"

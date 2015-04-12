@@ -125,7 +125,7 @@ bred_parseopt() {
   hosts_fromopt=
   local _fromfile="no"
   
-  while getopts "m:M:I:c:f:r:i:o:e:s:T:O:C:h" name; do
+  while getopts "m:M:I:c:f:r:i:o:e:s:T:O:h" name; do
     case "$name" in
       m)  hosts_fromopt=${OPTARG};;
       M)  mode=$OPTARG;;
@@ -139,7 +139,6 @@ bred_parseopt() {
       s)  sort_column=$OPTARG;;
       O)  sort_on_out=$OPTARG;;
       T)  sort_opt=$OPTARG;;
-      C)  conffile=$OPTARG;;
       h)  showhelp $0;;
       [?])  usage $0;;
     esac
@@ -217,12 +216,10 @@ bred_compose_task() {
 #   local _bredfs_read=$(bredfs_compose_read "${fsdir}" "${host_idx:-'-'}" "${_hosts}" | base64 -w 0)
   local _usercode_path="${nodepath}/${host_idx}/shared/usercode"
   local _bredcore_path="${nodepath}/${host_idx}/shared/bred-core"
-  local _bredconf_path="${nodepath}/${host_idx}/shared/bred.conf"
   local _brhosts_path="${nodepath}/${host_idx}/shared/br.hosts"
   debug "bred_compose_task: INFO: (1)"
   usercode=
   envvars="${envvars} BRED_CORE='${_bredcore_path}'"
-  envvars="${envvars} BRED_CONF='${_bredconf_path}'"
   envvars="${envvars} BRED_PARTID=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\""
   envvars="${envvars} BRED_USERCODE_PATH='${_usercode_path}'"
   envvars="${envvars} BRED_HOSTS_PATH='${_brhosts_path}'"
@@ -405,7 +402,7 @@ bred_executejob() {
   # now, for each host, set up in and out fifos (and a netcat for each), and ssh to each host to set up workers listening on netcat
   mkdir -p "${jobpath}/"{in,out}
   for host in "${hosts[@]}"; do
-    debug "bred_executejob: BEGIN: for"
+    debug "bred_executejob: INFO: begin for"
     ####
     # set up communication path
     # 1) master side
@@ -448,12 +445,13 @@ bred_executejob() {
     port_in=$(($port_in + 2))
     port_out=$(($port_in + 1))
     host_idx=$(($host_idx + 1))
-    debug "bred: bred_executejob: END: for: ${host_idx}"
+    debug "bred: bred_executejob: INFO: end for: ${host_idx}"
   done
 
   ####    
   # okay, time to map
   if which brp >/dev/null; then
+    debug "bred: bred_executejob: INFO: mapcolumn='${mapcolumn}' out_files='${out_files}'"
     eval "${input:+pv $input |} brp - $((${mapcolumn} - 1)) ${out_files}"
   else
     ####
@@ -540,7 +538,6 @@ main() {
   # sorttmpdir=${workdir}/tmp
   # sortmem[localhost]=32M
   # defaultsortmem=256K
-  conffile="$HOME/.bred/bred.conf"
   hosts_fromopt=
   namenode=
   workdir=/tmp/bred
@@ -552,8 +549,8 @@ main() {
   defaultsortmem=256K
   prog="`basename $0`"
   bred_parseopt "$@"
-  debug "main: conffile='${conffile}'"
-  BRED_CONF="${conffile}" source "$(dirname $(readlink -e $0))/bred-core"
+  debug "main: parseopt finished"
+  source "$(dirname $(readlink -e $0))/bred-core"
   # check if 'hosts' is set.
   debug "main: hosts_fromopt=${hosts_fromopt}"
   if [[ -n "${hosts_fromopt[*]}" ]]; then
