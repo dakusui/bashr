@@ -86,7 +86,8 @@ bredfs_compose_write() {
   local _conffile="${1}"
   local _fsbase=${2:?"ERR:_fsbase was not given"}
   local _namenode=(${3:?"ERR:_namenode was not given"})
-
+  ##
+  # FIXME: Since file append isn't an atomic operation, this implementation is not safe.
   local _f='nl -w 1 -b a -s " " ${APPEND} | ssh -o SendEnv=TO %s "bred -r '\''cat >> '${_fsbase}'/\${BRED_PARTID}/${TO}'\'' -T '\''-n'\'' -c '\''1'\''"'
   printf "${_f}" ${_namenode}
 }
@@ -148,6 +149,8 @@ bredfs_exportenv() {
 
   bredcore_debug "_conffile: ${_conffile}"
   bredcore_debug "_fsbase: ${_fsbase}"
+
+  # FIXME: Encoding/decoding file system operations is not necessary anymore.
   export BREDFS_INIT=$(bredfs_compose_init "${_conffile}" "${_fsbase}" | base64 -w 0)
   export BREDFS_WRITE=$(bredfs_compose_write "${_conffile}" "${_fsbase}" "${_namenode}" | base64 -w 0)
   export BREDFS_READ=$(bredfs_compose_read "${_fsbase}" "${_host_idx:-'-'}" "${_hosts}" | base64 -w 0)
