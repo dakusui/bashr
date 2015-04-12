@@ -84,6 +84,9 @@ is_debug() {
 # - -1: Failed to generate job index.
 # - 0, 1, ...: Valid job id
 bred_gen_job_idx() {
+  # job_idx
+  local _nextid=-1
+  local _jid_dir="${jmdir}"
   local _job_idx=
   for i in $(seq 1 3); do
     # Sleep randomized milliseconds to increase probability not to hit
@@ -143,22 +146,11 @@ bred_parseopt() {
       [?])  usage $0;;
     esac
   done
-  # job_idx
-  local _nextid=-1
-  local _jid_dir="${jmdir}"
   if [[ "${_fromfile}" == "yes" ]]; then
     debug "bred_parseopt: before--->${userfunc}:"
     userfunc=`cat "${userfunc}"`
     debug "bred_parseopt: after--->${userfunc}:"
   fi
-  mkdir -p "${_jid_dir}"
-  job_idx=$(bred_gen_job_idx)
-  if [[ "${job_idx}" == -1 ]]; then
-    quit "Failed to get job id. : ${_jid_dir}"
-  fi
-  debug "bred_parseopt: retrieved job id: ${job_idx:?Failed to get job id. }: ${_jid_dir}"
-  echo "$$" > "${_jid_dir}/${job_idx}/pid"
-
   sort_column=${sort_column:-$mapcolumn}
   case "$mode" in
     compat|map|reduce)
@@ -205,15 +197,12 @@ bred_compose_task() {
   sorter="2>$sorter_errolog"
   if [ "$sort_on_out" == "yes" ] ; then
     local _sortmem=$(bred_get_sortmem "$host_idx")
-    sorter="| LC_ALL='$LC_ALL' sort -S$_sortmem -T$sorttmpdir -k$sort_column,$sort_column $sort_opt  2>$sorter_errolog"
+    sorter="| LC_ALL='$LC_ALL' sort -S${_sortmem} -T$sorttmpdir -k$sort_column,$sort_column $sort_opt  2>$sorter_errolog"
   fi
   
   local envvars=
   local _namenode=${namenode}
   local _hosts="${hosts}"
-#   local _bredfs_init=$(bredfs_compose_init "${fsdir}" | base64 -w 0)
-#   local _bredfs_write=$(bredfs_compose_write "${_namenode}" '${fsdir}' | base64 -w 0)
-#   local _bredfs_read=$(bredfs_compose_read "${fsdir}" "${host_idx:-'-'}" "${_hosts}" | base64 -w 0)
   local _usercode_path="${nodepath}/${host_idx}/shared/usercode"
   local _bredcore_path="${nodepath}/${host_idx}/shared/bred-core"
   local _brhosts_path="${nodepath}/${host_idx}/shared/br.hosts"
@@ -223,9 +212,6 @@ bred_compose_task() {
   envvars="${envvars} BRED_PARTID=\"$host_idx\" BRED_KEYINDEX=\"$mapcolumn\" BRED_INTERPRETER=\"$interpreter\""
   envvars="${envvars} BRED_USERCODE_PATH='${_usercode_path}'"
   envvars="${envvars} BRED_HOSTS_PATH='${_brhosts_path}'"
-#  envvars="${envvars} BREDFS_INIT='${_bredfs_init}'"
-#  envvars="${envvars} BREDFS_WRITE='${_bredfs_write}'"
-#  envvars="${envvars} BREDFS_READ='${_bredfs_read}'"
   debug "bred_compose_task: INFO: (2)"
   local _i
   for _i in $(set -o posix ; set | grep -E "^BREDVAR_.*$"); do
@@ -392,13 +378,14 @@ bred_executejob() {
   # okay let's get started!  first we need a name for our job
   local jobpath="$jmdir/${job_idx}/job"
   local nodepath="$jmdir/${job_idx}/nodes"
-  local num_hosts=$(($(echo "$hosts" | wc -w)))
+  local num_hosts="${#hosts[@]}"
   local port_in=$(($baseport + $num_hosts * $job_idx * 2))
   local port_out=$(($port_in + 1))
   local host_idx=0
   local out_files=
   local in_files=
-  
+
+  debug "bred_executejob: num_hosts=${num_hosts}"
   # now, for each host, set up in and out fifos (and a netcat for each), and ssh to each host to set up workers listening on netcat
   mkdir -p "${jobpath}/"{in,out}
   for host in "${hosts[@]}"; do
@@ -551,6 +538,16 @@ main() {
   bred_parseopt "$@"
   debug "main: parseopt finished"
   source "$(dirname $(readlink -e $0))/bred-core"
+  ##
+  # determine job idx.
+  mkdir -p "${jmdir}"
+  job_idx=$(bred_gen_job_idx)
+  if [[ "${job_idx}" == -1 ]]; then
+    quit "Failed to get job id. : ${jmdir}"
+  fi
+  debug "bred_parseopt: retrieved job id: ${job_idx:?Failed to get job id. }: ${jmdir}"
+  echo "$$" > "${jmdir}/${job_idx}/pid"
+  ##
   # check if 'hosts' is set.
   debug "main: hosts_fromopt=${hosts_fromopt}"
   if [[ -n "${hosts_fromopt[*]}" ]]; then
