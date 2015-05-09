@@ -19,7 +19,7 @@ It's pronounced 'cross-bred' to express it is not an X application.
 The source of this example is found [here](examples/wordcount)
 
 ```main.xbred```
-```bash
+```shell
 
     #!/usr/local/bin/xbred
 
