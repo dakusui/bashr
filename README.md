@@ -57,6 +57,7 @@ Printed contents are then read by ```Map2```.
 This task splits each line in to words and prints them.
 
 ```reduce.awk```
+
 ```bash
 
     BEGIN {
@@ -82,8 +83,5 @@ see [here](/examples) for more exmples
 
 # See also
 * https://github.com/erikfrey/bashreduce
-* https://github.com/danfinkelstein/bashreduce
-* https://github.com/edwardbadboy
-* https://github.com/dakusui/bred
 
 
