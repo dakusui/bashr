@@ -557,7 +557,7 @@ main() {
     namenode="${hosts_fromopt[0]}"
     debug "main: hosts is overridden. '${hosts[*]}'"
   fi
-  hosts=${hosts:?"`basename $0`: must specify hosts with -m or provide ~/.bred/bred.conf"}
+  hosts=${hosts:?"`basename $0`: hosts are not given."}
   debug "main: hosts='${hosts[*]}'"
   
   bred_executejob;
