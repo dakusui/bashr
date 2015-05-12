@@ -5,7 +5,7 @@
 ## About xbred
 ```xbred``` uses ```bred```, which enhances Erik Frey's
 [```br```](https://github.com/erikfrey/bashreduce) for mapreduce task execution.
-The detail is discussed [here](docs/BRED.md)
+The detail is discussed [here](BRED.md)
 
 It's pronounced 'cross-bred' to express it is not an X application.
 
@@ -82,6 +82,8 @@ see [here](/examples) for more exmples
 * Hiroshi Ukai <dakusui@gmail.com>
 
 # See also
+* [README](README.md)
+* [BRED](BRED.md)
 * https://github.com/erikfrey/bashreduce
 
 
