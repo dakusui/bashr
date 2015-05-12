@@ -46,15 +46,20 @@ unpack_arr() {
 }
 
 ####
-# Loads brhosts
-bred_load_brhosts() {
-  if [[ -n "$1" ]]; then
-    echo $@
-  else
-    local _brhostsfile="/etc/br.hosts"
-    [[ -e "$HOME/.br.hosts" ]] && _brhostsfile="$HOME/.br.hosts"
-    _brhostsfile="${BRED_HOSTS_PATH:-$_brhostsfile}"
-    echo `cat ${_brhostsfile}`
+# Checks if 'debug' is enabled:
+#
+# Returned value:
+# 0 - Enabled / 1 - Otherwise
+bredcore_isdebug_enabled() {
+  if [[ "${BREDCORE_DEBUG:-off}" == "on" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+bredcore_debug() {
+  if bredcore_isdebug_enabled ; then
+    msg "bred-core: $*"
   fi
 }
 
@@ -64,8 +69,9 @@ bred_load_brhosts() {
 # Parameters:
 # - $1: A base directory of the local stroage of poorman's DFS
 bredfs_compose_init() {
-  local _fsbase=${1}
-  local _s='echo "" | bred -r "mkdir -p %s/\${BRED_PARTID}/$(dirname ${STORE}) ; truncate -s 0 %s/\${BRED_PARTID}/$(dirname ${STORE})/$(basename ${STORE})" -T "-n" -c 1'
+  local _conffile="${1}"
+  local _fsbase="${2:?ERR _fsbase was not given}"
+  local _s='echo "" | bred -r "mkdir -p %s/\${BRED_PARTID}/$(dirname ${STORE}) ; truncate -s 0 %s/\${BRED_PARTID}/$(dirname ${STORE})/$(basename ${STORE})" -T "-n" -c 1 '
   printf "${_s}" "${_fsbase}" "${_fsbase}"
 }
 
@@ -77,11 +83,13 @@ bredfs_compose_init() {
 # - $2: A base directory of the local stroage of poorman's DFS
 bredfs_compose_write() {
   # nl -w 1 -b a ~/Documents/FSM.md | bred -r 'cat > /tmp/bredfs/${BRED_WORKER_IDX}/work/FSM.md' -T '-n' -c 1 >& /dev/null
-  local _namenode=(${1})
-  local _fsbase=${2}
-
-  local _f='nl -w 1 -b a -s " " ${APPEND} | ssh -o SendEnv=TO localhost "bred -r '\''cat >> '${_fsbase}'/\${BRED_PARTID}/${TO}'\'' -T '\''-n'\'' -c '\''1'\''"'
-  printf "${_f}" ${_namenode} ${_fsbase} '${TO}'
+  local _conffile="${1}"
+  local _fsbase=${2:?"ERR:_fsbase was not given"}
+  local _namenode=(${3:?"ERR:_namenode was not given"})
+  ##
+  # FIXME: Since file append isn't an atomic operation, this implementation is not safe.
+  local _f='nl -w 1 -b a -s " " ${APPEND} | ssh -o SendEnv=TO %s "bred -r '\''cat >> '${_fsbase}'/\${BRED_PARTID}/${TO}'\'' -T '\''-n'\'' -c '\''1'\''"'
+  printf "${_f}" ${_namenode}
 }
 
 ####
@@ -112,12 +120,39 @@ bredfs_compose_read() {
 ####
 # Exports BREDFS environment variables
 bredfs_exportenv() {
-  local _host_idx="${1:-}"
-  local _hosts=$(bred_load_brhosts ${2:-""})
-  local _namenode="${_hosts[0]}"
-  local _fsbase="${3:-${HOME}/.bred/fs}"
-  export BREDFS_INIT=$(bredfs_compose_init "${_fsbase}" | base64 -w 0)
-  export BREDFS_WRITE=$(bredfs_compose_write "${_namenode}" "${_fsbase}" | base64 -w 0)
+  local _host_idx="${1:?'Missing partition id (host idx)'}"
+  local _conffile="${2:?'Missing conf file'}"
+  ####
+  # Load per user config
+  declare -A sortmem
+  if [ -r "${_conffile}" ]; then
+    ####
+    # Configurable parameters and their default values
+    # Example
+    #   baseport=10000
+    #   hosts=(localhost localhost localhost localhost)
+    #   namenode=${hosts[0]}
+    #   workdir=/tmp/bred
+    #   fsdir=${workdir}/fs
+    #   jmdir=${workdir}/jm
+    #   sorttmpdir=${workdir}/tmp
+    #   sortmem[localhost]=32M
+    #   defaultsortmem=256K
+    source "${_conffile}"
+  else
+    echo "Config file '${_conffile}' was not found from $PWD.($1)($2)" >& 2
+    exit 1
+  fi
+  local _hosts="${hosts[@]}"
+  local _namenode="${namenode}"
+  local _fsbase="${fsdir}"
+
+  bredcore_debug "_conffile: ${_conffile}"
+  bredcore_debug "_fsbase: ${_fsbase}"
+
+  # FIXME: Encoding/decoding file system operations is not necessary anymore.
+  export BREDFS_INIT=$(bredfs_compose_init "${_conffile}" "${_fsbase}" | base64 -w 0)
+  export BREDFS_WRITE=$(bredfs_compose_write "${_conffile}" "${_fsbase}" "${_namenode}" | base64 -w 0)
   export BREDFS_READ=$(bredfs_compose_read "${_fsbase}" "${_host_idx:-'-'}" "${_hosts}" | base64 -w 0)
 }
 
@@ -152,4 +187,12 @@ bredfs() {
 }
 
 # Export the environment variables
-bredfs_exportenv
+prog=$(basename ${0})
+bred_bindir=$(dirname $(readlink -e "${BASH_SOURCE}"))
+bred_conffile="${bred_bindir}/bred.conf"
+if [[ -e "${bred_bindir}/bred.testconf" ]]; then
+  bred_conffile="${bred_bindir}/bred.testconf"
+  msg "WARNING: bred is now in test mode. (config=${bred_conffile} is being used)"
+fi      
+  
+bredfs_exportenv "${BRED_PARTID:-'-'}" "${bred_conffile}"

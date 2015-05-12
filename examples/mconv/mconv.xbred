@@ -1,0 +1,61 @@
+#!/usr/local/bin/xbred
+
+####
+# mconv.xbred: A tool to convert music files into more compatible mp4 format.
+#
+# To use this program, you will need to install 'ffmpeg' and 'libmp3lame-dev' by executing following commands
+# if they are not available.
+#
+# sudo apt-get update
+# sudo apt-get install ffmpeg
+# sudo apt-get install libmp3lame-dev
+#
+
+declare SRCDIRS=/mnt/livius/Qmultimedia/FLAC:/mnt/livius/Qmultimedia/HIRES
+declare DESTDIR=/mnt/livius/Qmultimedia/PS3-test/Music
+
+####
+#          Id: main
+#        Type: local
+# Interpreter: bash
+#         Key: -
+#       Sinks: conv
+function local main(bash,-,conv) inline:<<EOF
+    for srcdir in $(echo ${SRCDIRS} | sed -e 's/:/ /g')
+    do
+        find "${srcdir}" -type f -size +1c -not -name '.*' -exec printf "${srcdir} %s\n" {} \; | \
+        sed -e "s%${srcdir}/%%" | \
+        nl -w 1 -s ' ' -b a
+    done
+EOF
+
+####
+#          Id: conv
+#        Type: map
+# Interpreter: bash
+#         Key: 1
+#       Sinks: -
+function map conv(bash,1,-) inline:<<EOF
+    export LC_ALL=en_US.UTF-8
+    export LANG=en_US.UTF-8
+    export LANGUAGE=en_US.UTF-8
+    while read line
+    do
+      srcdir=$(echo "$line" | cut -f 2 -d ' ') 
+      fname=$(echo "$line" | cut -f 3- -d ' ' | sed -e "s%${srcdir}/%%")
+      srcfname="${srcdir}/$fname"
+      destfname="$DESTDIR/${fname%.*}.mp4"
+      if [ "${srcfname}" -nt "${destfname}" ] ; then
+        # dirname breaks non-ascii path names. let's use bash's pattern matching opertor instead...
+        mkdir -p "${DESTDIR}/${fname%/*}"
+        /usr/bin/avconv -y -i \
+          "${srcfname}" \
+          -vn -acodec libvo_aacenc -b:a 320k -ac 2 -ar 48000 -b:a 320k  \
+          "${destfname}"
+      else
+        echo "Skipping '${srcfname}'" 1>&2
+      fi
+   done
+EOF
+
+

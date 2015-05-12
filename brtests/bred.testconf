@@ -1,0 +1,9 @@
+baseport=10000
+hosts=(localhost localhost localhost localhost)
+namenode="${hosts[0]}"
+workdir="/tmp/bred"
+fsdir="${workdir}/fs"
+jmdir="${workdir}/jm"
+sorttmpdir="${workdir}/sort"
+sortmem["${namenode}"]="32M"
+defaultsortmem="256K"

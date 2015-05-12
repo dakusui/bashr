@@ -1,7 +1,0 @@
-#!/usr/local/bin/xbred
-
-#Id   Type Sinks          Key Interpreter Task
-Tok   M    Ind1;Ind2;Ind3 -   sh          inline:"cat -n"
-Ind1  R    -              2   awk;-f      inline:'{ print "Ind1",$0; }'
-Ind2  R    -              3   awk;-f      inline:'{ print "Ind2",$0; }'
-Ind3  R    -              3   awk;-f      file:ARG1="hello:world" ARG2="nice":'ind3'

@@ -1,6 +1,6 @@
 # bred : bashreduce enhanced.
 
-```bred``` is an enhanced version of Erik Frey's ```bashreduce```
+```bred``` is an enhanced version of Erik Frey's ```bashreduce```.
 
 ## About [```bashreduce```](https://github.com/erikfrey/bashreduce)
 ```bashreduce``` is a shell script created by erikfrey that lets you apply your favorite unix tools in a mapreduce fashion
@@ -19,9 +19,7 @@ Below are the enhancements implemented in ```bred```
 * Created 'map' and 'reduce' behaviour modes, which allow you to perform
   tasks more normal mapreduce way. The behavior Erik Frey created is now
   called 'compat' and it is still a default.
-* Made it possible to specify job_id (-j option) by an integer. Based on this
-  number bred allocates ports to be used and now you can use ```bred``` multiple
-  times in a command line connecting them with pipes.
+* It searches for vacant ports automatically.
 * Made it possible to specify base port.
 * Added 'sort_opt' option to be able to make sort commands use it. This is
   useful e.g., when you want to sort the output by a numeric field. Use "-s '-n'"

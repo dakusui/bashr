@@ -2,7 +2,7 @@
 
 ####
 #          Id: main
-#        Type: map
+#        Type: local
 # Interpreter: sh
 #         Key: 1
 #       Sinks: -

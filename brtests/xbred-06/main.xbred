@@ -3,6 +3,7 @@
 declare var1=value1
 declare var2='value2'
 declare var3='value3.1 value3.2'
+declare var3m='value3.1m value3.2m'
 
 ####
 #          Id: main
@@ -10,8 +11,23 @@ declare var3='value3.1 value3.2'
 # Interpreter: sh
 #         Key: 1
 #       Sinks: -
-function map main(sh,1,-) inline:<<EOF
+function local main(sh,1,-) inline:<<EOF
   echo $var1
   echo $var2
   echo $var3
+EOF
+
+####
+#          Id: main
+#        Type: map
+# Interpreter: sh
+#         Key: 1
+#       Sinks: -
+function map mapfunc(sh,1,-) inline:<<EOF
+  echo ">mapfunc"
+  echo $var1
+  echo $var2
+  echo $var3
+  echo $var3m
+  echo "<mapfunc"
 EOF
