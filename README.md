@@ -1,9 +1,9 @@
-# ```bredxbred```: ```bred```(bashreduce enhanced) and ```xbred```(cross bred)
+# ```bredxbred```: ```bred``` and ```xbred```
 
 ```bredxbred``` is a project to develop an easy map reduce framework where you can define map and reduce jobs with your daily tools like bash, awk, perl, etc.
 
 It consists of two components,
-* ```bred```: 'bashreduce' (by Erik Frey) enhanced. Enables you to write a map reduce job. 
+* ```bred```: Enhanced version of 'bashreduce'. Original bashreduce was developed by Erik Frey. It enables you to write a map reduce job. 
 * ```xbred```: an interpreter to write a pipeline which consists of ```bred``` based map reduce jobs.
 
 # Installation
@@ -116,4 +116,3 @@ You can find more examples under [examples](examples/) directory.
 * [BRED](BRED.md)
 * [XBRED](XBRED.md)
 * https://github.com/erikfrey/bashreduce
-
