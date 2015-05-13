@@ -448,10 +448,12 @@ parse_opts() {
   local _name="";
   bredtask=""
   jobmode="normal"
-  while getopts "k:m" _name; do
+  infile="/dev/stdin"
+  while getopts "k:m:i:" _name; do
     case "${_name}" in
       k)   bredtask=${OPTARG};;
       m)   jobmode=${OPTARG};;
+      i)   infile=${OPTARG};;
       [?]) usage $0;;
     esac
   done
@@ -488,6 +490,9 @@ main() {
   tmpdir="${xbreddir}/tmp"; mkdir "${tmpdir}"
   bredout="${tmpdir}/out"
   msg "session directory='${xbreddir}'"
+  rm -f "${workdir}/xbred/latest-session"
+  ln -s "${xbreddir}" "${workdir}/xbred/latest-session"
+  
   declare -A tasktype
   declare -A sinks
   declare -A key
@@ -512,13 +517,13 @@ main() {
     # start pipleline
     msg "starting pipeline"
     mkfifo "${bredout}"
-    read_stdin | exec_task "${firsttask}"
+    cat "${infile}" | exec_task "${firsttask}"
     _exitcode=$?
     cat "${bredout}"
     rm "${bredout}"
     msg "done"
   elif [ "$jobmode" == "single" ]; then
-    read_stdin | exec_single_task "${firsttask}"
+    cat "${infile}" | exec_single_task "${firsttask}"
     # error_check
     _exitcode=$?
   else

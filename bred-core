@@ -12,15 +12,6 @@ quit() {
 }
 
 ####
-# Reads stdin and forward it to stdout.
-read_stdin() {
-  while IFS="" read -r _line
-  do
-    echo "${_line}"
-  done
-}
-
-####
 # Packs an array in to a string
 #
 # Parameters:
