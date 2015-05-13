@@ -490,7 +490,7 @@ bred_executejob() {
   for host in ${hosts}; do
     local cmd='for i in $(ls '${nodepath}'/'${i}'/err*); do echo '${i}' $(basename $i); nl -w 1 -s " " $i; echo '${i}' ----; done'
     if [ -n "$error" ]; then
-      ssh -A "$host" "$cmd" >>"$error"
+      ssh -A "$host" "$cmd" >>"${i}-${error}"
     else
       # By default, redirect stdouts of ssh commands to stderr because the files are originally stderr.
       ssh -A "$host" "$cmd" 1>&2
