@@ -1,0 +1,5 @@
+#!/usr/local/bin/xbred
+
+function map _main(sh,1,-) inline:<<EOF
+  cat -n
+EOF

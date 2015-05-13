@@ -1,0 +1,93 @@
+#!/usr/local/bin/xbred
+
+################################################################################
+# 
+# xbred example: 'Hadoop and MapReduce: A Parallel Program to Assign Row Numbers'
+# 
+# See: http://blog.data-miners.com/2009/11/hadoop-and-mapreduce-parallel-program.html
+#
+################################################################################
+
+# Variables
+
+# NOTE: You cannot use a reference from inside a variable definition.
+#       e.g. you CANNOT do something linke 'SRCDATA=${BASDIR}/src'
+# NOTE: YOu cannot quote your values
+#       e.g. you CANNOT do something like 'SRCDATA="/path/to/somewhere"'
+#            Do simply 'SRCDATA=/path/to/somewhere'
+
+####
+#          Id: SRCDATA
+# Description: A bredfs file to store source data
+declare SRCDATA=/examples/05/src
+####
+#          Id: PARTID
+# Description: (t.b.d.)
+declare PARTID=/examples/05/partid
+####
+#          Id: OFFSET
+# Description: (t.b.d.)
+declare OFFSET=/examples/05/offset
+####
+#          Id: RESULT
+# Description: (t.b.d.)
+declare RESULT=/examples/05/result
+
+# Functions
+
+####
+#          Id: main
+#        Type: map
+# Interpreter: bash
+#         Key: 1
+#       Sinks: job1 job2
+function local main(bash,-,-) inline:<<EOF
+  . ${BRED_CORE}
+
+  STORE="${SRCDATA}" bredfs init
+  STORE="${PARTID}" bredfs init
+  xbred  -k partnum "${BRED_SELF}"
+
+  STORE="$OFFSET" bredfs init
+  _c=0
+  FROM="$PARTID" bredfs read | while read -r _i ; do
+    read -a _j <<< $_i
+    echo "${_j[0]} $_c"
+    _c=$((_c + ${_j[1]}))
+  done | TO="${OFFSET}" bredfs write
+
+  STORE="$RESULT" bredfs init
+  echo | xbred -k seqnum "${BRED_SELF}"
+EOF
+
+####
+#          Id: partnum
+#        Type: map
+# Interpreter: bash
+#         Key: 1
+#       Sinks: -
+function map partnum(bash,1,-) inline:<<EOF
+  . ${BRED_CORE}
+
+  xargs -d "\n" -n 1 printf ":part${BRED_PARTID}: %s\n"|
+    tee >(TO="${SRCDATA}" bredfs write) |
+        echo ":part${BRED_PARTID}: $(wc -l)" | TO="${PARTID}" bredfs write
+EOF
+
+####
+#          Id: seqnum
+#        Type: map
+# Interpreter: bash
+#         Key: 1
+#       Sinks: -
+function map seqnum(bash,1,-) inline:<<EOF
+  . ${BRED_CORE}
+
+  offset=$(SELECT="cut -f 3 -d ' '" FROM="${OFFSET}" WHERE="grep ':part${BRED_PARTID}:'" bredfs read)
+  SELECT="cat" FROM="${SRCDATA}" WHERE="grep ':part${BRED_PARTID}:'" bredfs read | while read -r line; do
+    read -a cols <<< "${line}"
+    part="${cols[1]}"
+    ln=$((${cols[0]} + ${offset}))
+    echo "${ln} ${cols[@]:2}"
+  done | TO="${RESULT}" bredfs write
+EOF

@@ -525,6 +525,32 @@ value3.1 value3.2"
   fi
 }
 
+####
+# Make sure key converter is working correctly
+function xbredtest_xbred_08a() {
+  if [ $1 == 'expected' ]; then
+    printf "1\n2\n3\n4"
+  elif [ $1 == 'actual' ]; then
+    cat ${TESTDIRNAME}/xbred-08/in1.testdata | ${XSUT} "${TESTDIRNAME}/xbred-08/main.xbred" 2>/dev/null | sort
+  else
+    echo "Invalid mode $1 is specified"
+    exit 1
+  fi
+}
+
+####
+# Make sure key converter is working correctly
+function xbredtest_xbred_08b() {
+  if [ $1 == 'expected' ]; then
+    printf "1\n2\n3\n4"
+  elif [ $1 == 'actual' ]; then
+    cat ${TESTDIRNAME}/xbred-08/in2.testdata | ${XSUT} "${TESTDIRNAME}/xbred-08/main.xbred" 2>/dev/null | sort
+  else
+    echo "Invalid mode $1 is specified"
+    exit 1
+  fi
+}
+
 function main() {
   if [[ $# > 0 ]]; then
     for each in $@ ; do

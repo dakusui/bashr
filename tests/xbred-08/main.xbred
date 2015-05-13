@@ -1,0 +1,19 @@
+#!/usr/local/bin/xbred
+
+####
+#          Id: main
+#        Type: map
+# Interpreter: sh
+#         Key: 1
+#       Sinks: -
+function map main(sh,1,mapJob) inline:<<EOF
+  cat
+EOF
+
+function map mapJob(sh,1,reduceJob) inline:<<EOF
+  cat
+EOF
+
+function reduce reduceJob(sh,2,-) inline:<<EOF
+  wc -l
+EOF
