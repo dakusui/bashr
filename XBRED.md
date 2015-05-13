@@ -13,6 +13,9 @@ It's pronounced 'cross-bred' to express it is not an X application.
 In this section, picking up a ```word count``` program bundled with ```xbred```, we'll discuss how you can write your own ```xbred``` program.
 see [here](/examples/EXAMPLES.md) for more examples
 
+Basically, an ```xbred``` program is a filter, but a way to make it non-filter one will be discussed in this section, too.
+See "Shebang" sub-section.
+
 ## Write a "word count" example in ```xbred``` style.
 "wordcount" example written in ```xbred``` as follows.
 The source of this example is found [here](examples/wordcount)
@@ -28,11 +31,11 @@ The source of this example is found [here](examples/wordcount)
     #         Key: 1
     #       Sinks: wordcount
     function map main(awk -f,1,wordcount) inline:<<EOF
-    {
-      gsub(/([[:punct:]]|[[:blank:]])+/, " ", $0);
-      n=split($0,cols," ");
-      for (i = 1; i <= n; i++) { print cols[i]; };
-    }
+      {
+        gsub(/([[:punct:]]|[[:blank:]])+/, " ", $0);
+        n=split($0,cols," ");
+        for (i = 1; i <= n; i++) { print cols[i]; };
+      }
     EOF
 
     ####
@@ -204,6 +207,22 @@ If you do like this
 
 Quotations will be a part of the value. ```echo $var``` will print ```"Hello world"```, not ```Hello world```.
 
+
+## Shebang
+As already mentioned ```.xbred``` program is a filter, but sometimes you want to create a non-filter one.
+If you don't need any input for your program, you can do
+
+
+```bash
+
+    #!/usr/local/bin/xbred -i /dev/null
+
+```
+
+Your program will read input from ```/dev/null```, which immediately reaches the end.
+An example of this usage is found [here](examples/mconv/mconv.xbred)
+    
+
 # Executing a ```.xbred``` file.
 
 You can simply give your program to ```xbred``` command as its argument.
@@ -216,10 +235,7 @@ You can simply give your program to ```xbred``` command as its argument.
 
 
 # Future works
-* Fix a bug in key converter.
-* Fix a bug in log collection.
 * Allow quotations in variable declarations.
-* Support a mode to discard stdin.
 
 # Author
 * Hiroshi Ukai <dakusui@gmail.com>
