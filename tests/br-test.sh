@@ -3,8 +3,10 @@
 ####
 # Global variables
 BRED_BASEDIR="/tmp/bred"
-DIRNAME=$(dirname $(dirname $0))
+TESTDIRNAME=$(dirname $0)
+DIRNAME=$(dirname ${TESTDIRNAME})
 SUT="${DIRNAME}/bred"
+XSUT="${DIRNAME}/xbred"
 NUM_TOTAL=0
 NUM_PASSED=0
 
@@ -460,6 +462,63 @@ B WORLD' > "${_tmp}"
     echo "==READ=="
     # sort the output since the order doesn't matter
     FROM="/path/to/store" WHERE="grep -E 'A|HELLO'" bredfs read | sort 2>/dev/null
+  else
+    echo "Invalid mode $1 is specified"
+    exit 1
+  fi
+}
+
+function xbredtest_xbred_01() {
+  if [ $1 == 'expected' ]; then
+    printf "     1\t"
+  elif [ $1 == 'actual' ]; then
+    echo "" | ${XSUT} "${TESTDIRNAME}/xbred-01/main.xbred" 2>/dev/null
+  else
+    echo "Invalid mode $1 is specified"
+    exit 1
+  fi
+}
+
+function xbredtest_xbred_02() {
+  if [ $1 == 'expected' ]; then
+    printf "     1\t     1\t"
+  elif [ $1 == 'actual' ]; then
+    echo "" | ${XSUT} "${TESTDIRNAME}/xbred-02/main.xbred" 2>/dev/null
+  else
+    echo "Invalid mode $1 is specified"
+    exit 1
+  fi
+}
+
+function xbredtest_xbred_03() {
+  if [ $1 == 'expected' ]; then
+    printf "     1\t     1\t     1\t"
+  elif [ $1 == 'actual' ]; then
+    echo "" | ${XSUT} "${TESTDIRNAME}/xbred-03/main.xbred" 2>/dev/null
+  else
+    echo "Invalid mode $1 is specified"
+    exit 1
+  fi
+}
+
+function xbredtest_xbred_04() {
+  if [ $1 == 'expected' ]; then
+    printf "     1\t     1\t\n     1\t     1\t"
+  elif [ $1 == 'actual' ]; then
+    echo "" | ${XSUT} "${TESTDIRNAME}/xbred-04/main.xbred" 2>/dev/null
+  else
+    echo "Invalid mode $1 is specified"
+    exit 1
+  fi
+}
+
+function xbredtest_xbred_06() {
+  if [ $1 == 'expected' ]; then
+    printf "value1
+value2
+value3.1 value3.2"
+  elif [ $1 == 'actual' ]; then
+    echo "" | ${XSUT} "${TESTDIRNAME}/xbred-06/main.xbred" 2>/dev/null
   else
     echo "Invalid mode $1 is specified"
     exit 1
