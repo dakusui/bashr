@@ -471,7 +471,7 @@ bred_executejob() {
   debug "bred_executejob: INFO: in_files: ${_in_files_state}"
   local _each_host
   local _host_idx=0
-  for _each_host in ${hosts}; do
+  for _each_host in "${hosts[@]}"; do
     local _node_state=$(ssh -A "${_each_host}" "ls -al '${nodepath}/${_host_idx}/in'")
     _host_idx=$((${_host_idx} + 1))
     debug "bred_executejob: bred_executejob: node state (${_host_idx}): ${_node_state}"
@@ -486,16 +486,16 @@ bred_executejob() {
   
   ####
   # save errors somewhere
-  local i=0;
-  for host in ${hosts}; do
-    local cmd='for i in $(ls '${nodepath}'/'${i}'/err*); do echo '${i}' $(basename $i); nl -w 1 -s " " $i; echo '${i}' ----; done'
+  local j=0;
+  for host in "${hosts[@]}"; do
+    local cmd='for i in $(ls '${nodepath}'/'${j}'/err*); do echo '${j}' $(echo $i); nl -w 1 -s " " $i; echo '${j}' ----; done'
     if [ -n "$error" ]; then
-      ssh -A "$host" "$cmd" >>"${i}-${error}"
+      ssh -A "$host" "$cmd" >> "${error}"
     else
       # By default, redirect stdouts of ssh commands to stderr because the files are originally stderr.
       ssh -A "$host" "$cmd" 1>&2
     fi
-    i=$(($i + 1))
+    j=$(($j + 1))
   done
   
   ####    
