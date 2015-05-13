@@ -5,18 +5,8 @@
 #        Type: map
 # Interpreter: sh
 #         Key: 1
-#       Sinks: map
-function map main(sh,1,map) inline:<<EOF
-  cat
-EOF
-
-####
-#          Id: map1
-#        Type: map
-# Interpreter: sh
-#         Key: 1
-#       Sinks: reduce
-function map map(awk -f,1,reduce) inline:<<EOF
+#       Sinks: wordcount
+function map main(awk -f,1,wordcount) inline:<<EOF
   {
     gsub(/([[:punct:]]|[[:blank:]])+/, " ", $0);
     n=split($0,cols," ");
@@ -25,12 +15,12 @@ function map map(awk -f,1,reduce) inline:<<EOF
 EOF
 
 ####
-#          Id: reduce
+#          Id: wordcount
 #        Type: reduce
 # Interpreter: awk -f
 #         Key: 1
 #       Sinks: -
-function reduce reduce(awk -f,1,-) inline:<<EOF
+function reduce wordcount(awk -f,1,-) inline:<<EOF
   BEGIN {
     c=0;
   }
