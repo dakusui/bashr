@@ -87,11 +87,9 @@ You can also let ```xbred``` read a file and define a function with the content 
 This component specifies a type of a function.
 Possible types are ```map```, ```reduce```, and ```local```.
 
-* ```map``` and ```reduce```
-Those define map and reduce jobs respectively. The function will be distributed among hosts and executed.
+* ```map``` and ```reduce```: Those define map and reduce jobs respectively. The function will be distributed among hosts and executed.
 
-* ```local```
-This defines a local function, which will be executed on the same host as the enclosing file.
+* ```local```: This defines a local function, which will be executed on the same host as the enclosing file.
 
 ### ```funcname```: A name of a function
 This component gives a name to the function to be defined. The function name can be used in ```sinks``` component.
