@@ -19,13 +19,13 @@ It consists of two components,
 
 * bash (Ubuntu - 4.3.11(1), Raspbian - 4.2.37(1))
 * Other Unix tools
-** coreutils 
-** netcat-traditional (nc command. It must support listen mode)
-** pv
-** gawk
-** openssh-client
-** openssh-server
-** rsync
+ * coreutils 
+ * netcat-traditional (nc command. It must support listen mode)
+ * pv
+ * gawk
+ * openssh-client
+ * openssh-server
+ * rsync
 
 # Installation
 ## Build a utility program: ```brp```
