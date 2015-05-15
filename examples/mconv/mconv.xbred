@@ -1,15 +1,12 @@
 #!/usr/local/bin/xbred -i /dev/null
 
-####
-# mconv.xbred: A tool to convert music files into more compatible mp4 format.
+########################################################################
 #
-# To use this program, you will need avconv and 
-# if they are not available.
+# mconv.xbred: A tool to convert music files into more compatible 
+#              mp4 format. To use this program, you will need avconv
+#               and your codecs. 
 #
-# sudo apt-get update
-# sudo apt-get install ffmpeg
-# sudo apt-get install libmp3lame-dev
-#
+########################################################################
 
 declare SRCDIRS=/mnt/livius/Qmultimedia/FLAC:/mnt/livius/Qmultimedia/HIRES
 declare DESTDIR=/mnt/livius/Qmultimedia/PS3-test/Music
