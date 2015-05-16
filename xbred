@@ -58,7 +58,7 @@ read_xbred_func() {
   local _line=$1
   local _typename _funcname _args _scheme _jobdef
   local _regex=
-  _regex="^function[[:space:]]+(map|reduce|local|pipe)[[:space:]]+([A-Za-z_][A-Za-z_0-9]*)[[:space:]]*"
+  _regex="^function[[:space:]]+(map|reduce|local)[[:space:]]+([A-Za-z_][A-Za-z_0-9]*)[[:space:]]*"
   _regex="${_regex}\(([^\)]*)\)[[:space:]]*"
   _regex="${_regex}([a-z]+\:)(<<([A-Za-z0-9_]+)|(.+))$"
   if [[ "${_line}" =~ $_regex ]]; then
@@ -168,7 +168,15 @@ read_xbred_file() {
     case "${_line}" in
       function*)
 	local _id _type _sinks _key _interpreter _packedtask
-	read -r _id _type _sinks _key _interpreter _packedtask <<< $(read_xbred_func "$_line")
+	# Assigning directly to each variable doesn't work on bash 4.2 due to a slight
+	# behaviour difference of 'read' built-in command.
+	local _arr=( $(read_xbred_func "$_line") )
+	_id="${_arr[0]}"
+	_type="${_arr[1]}"
+	_sinks="${_arr[2]}"
+	_key="${_arr[3]}"
+	_interpreter="${_arr[4]}"
+	_packedtask="${_arr[5]}"
 	xbred_debug "INFO: id=${_id},type=${_type},sinks=${_sinks},key=${_key},interpreter=${_interpreter},packedtask=${_packedtask}"
 	if [ ${tasktype[${_id}]+_} ]; then
 	  xbred_quit "The key ${_id} is defined more than once"
@@ -305,7 +313,7 @@ compose_keyconverter() {
   if [[ "${_k2}" == "-" ]]; then
     _k2=1
   fi
-  local _cmd="bred -e ${_logfile} -c ${_k2} -s ${_k2} -M map -I \"sh -c\" -r 'cat'|"
+  local _cmd="bred -c ${_k2} -s ${_k2} -M map -I \"sh -c\" -r 'cat' -e ${_logfile} |"
   xbred_debug "END: compose_keyconverter: ${_cmd}"
 }
 
@@ -333,9 +341,9 @@ compose_single_task() {
   done
 
   if [[ "${_tasktype}" == "M" ]]; then
-    _cmd="bred -e ${_logfile} -c \"$(currentkey ${1})\" ${_sort_on_out} -M map -I \"${interpreter[${1}]}\" -f yes -r '${_tmp_file}'"
+    _cmd="bred -c \"$(currentkey ${1})\" ${_sort_on_out} -M map -I \"${interpreter[${1}]}\" -f yes -r '${_tmp_file}' -e ${_logfile} "
   elif [[ "${_tasktype}" == "R" ]]; then
-    _cmd="bred -e ${_logfile}  -c \"$(currentkey ${1})\" ${_sort_on_out} -M reduce -I \"${interpreter[${1}]}\" -f yes -r '${_tmp_file}'"
+    _cmd="bred -c \"$(currentkey ${1})\" ${_sort_on_out} -M reduce -I \"${interpreter[${1}]}\" -f yes -r '${_tmp_file}' -e ${_logfile} "
   elif [[ "${_tasktype}" == "L" ]]; then
     _cmd="BRED_CORE=${BRED_CORE} ${interpreter[${1}]} '${_tmp_file}'"
   else
@@ -413,13 +421,15 @@ exec_task() {
 # $2 number of tasks
 count_tasks_in_xbred_file() {
   local _num=${2:-0}
-  if [ "${tasktype[$1]}" == "M" ] ; then
+  local _taskname="${1}"
+
+  if [ "${tasktype[${_taskname}]}" == "M" ] ; then
     _num=$((${_num} + 1))
-  elif [ "${tasktype[$1]}" == "R" ] ; then
+  elif [ "${tasktype[${_taskname}]}" == "R" ] ; then
     _num=$((${_num} + 1))
   fi
   local _sinks=""
-  IFS=" " read -ra _sinks <<< "${sinks[${1}]}"
+  IFS=" " read -ra _sinks <<< "${sinks[${_taskname}]}"
   first=1
   for _s in "${_sinks[@]}"; do
     if [ "${_s}" == "-" ]; then
@@ -488,8 +498,7 @@ main() {
   xbreddir=$(mktemp -d $(date  +"${workdir}/xbred/%Y%m%d-%H%M%S.XXXXX"))
   logdir="${xbreddir}/logs"; mkdir "${logdir}"
   tmpdir="${xbreddir}/tmp"; mkdir "${tmpdir}"
-  bredout="${tmpdir}/out"
-  msg "session directory='${xbreddir}'"
+  bredout="/dev/stdout"
   rm -f "${workdir}/xbred/latest-session"
   ln -s "${xbreddir}" "${workdir}/xbred/latest-session"
   
@@ -516,11 +525,8 @@ main() {
   if [ "$jobmode" == "normal" ]; then  
     # start pipleline
     msg "starting pipeline"
-    mkfifo "${bredout}"
     cat "${infile}" | exec_task "${firsttask}"
     _exitcode=$?
-    cat "${bredout}"
-    rm "${bredout}"
     msg "done"
   elif [ "$jobmode" == "single" ]; then
     cat "${infile}" | exec_single_task "${firsttask}"

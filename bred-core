@@ -178,7 +178,7 @@ bredfs() {
 }
 
 # Export the environment variables
-prog=$(basename ${0})
+prog=$(basename "${0}")
 bred_bindir=$(dirname $(readlink -e "${BASH_SOURCE}"))
 bred_conffile="${bred_bindir}/bred.conf"
 if [[ -e "${bred_bindir}/bred.testconf" ]]; then
