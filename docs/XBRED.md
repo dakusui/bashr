@@ -11,7 +11,7 @@ It's pronounced 'cross-bred' to express it is not an X application.
 # Writing an ```xbred``` program.
 
 In this section, picking up a ```word count``` program bundled with ```xbred```, we'll discuss how you can write your own ```xbred``` program.
-see [here](../examples/EXAMPLES.md) for more examples
+see [here](../examples/README.md) for more examples
 
 Basically, an ```xbred``` program is a filter, but a way to make it non-filter one will be discussed in this section, too.
 See "Shebang" sub-section.

@@ -125,42 +125,119 @@ Important point is, if a file name is given as ```$2```,
 this code, which can be executed on any hosts in br.hosts, can always open the same file.
 
 ## poor man's DFS
-multiple times in br.hosts file.
-You can use ```bred``` as 'poor man's DFS'. Since I have added a small enhancement to the original ```br```, now you can specify
-a certain host multiple times in br.hosts file.
-But still only text files can be stored.
+I have implemented a poor man's DFS for ```bred```.
+It can create, write, and read distributed files. Its ancestor ```br``` couldn't use this feature if the same host name is repeated in its configuration, but ```bred``` can do it.
 
-### Creating a directory
-Creating a directory is like this.
+### Limitations
+Don't forget it's a poor man's one.
+
++ It can only store text files.
++ No redundancy.
++ Directory listing isn't supported yet.
+
+### Preparation
+At first, you need to source (import) necessary environment variables, functions, etc.
+Please do this on your shell.
+
 ```
-echo "" | ./bred -r 'mkdir -p /tmp/bredfs/${BRED_PARTID}/work' -T '-n' -c 1
+    . /usr/local/bin/bredfs
 ```
 
-```/tmp/bredfs``` is the directory in which you want to store your data. And this path can be anything as long as it is
-available on all the hosts.
 
-The string ```${BRED_PARTID}``` is the trick. This portion will be expanded differently on runtime depending on which
-ssh processes, not on which hosts, so you do not break your data even if you specify a certain host name multiple times.
+### Creating a file
+Creating (initializing) a file can be done by following command line.
 
-The portion ```/work``` is the path in the file system of poor man's DFS.
-Similarly,
+```
+    STORE=/path/to/store bredfs init
+```
+
+, where ```/path/to/store``` is a path to the file.
+By this, a file ```{fsdir}/{host index}/path/to/store``` will be created on each host.
+```fsdir``` is a value configured in the configuration file (```bred.conf``` see [README](../README.md)) and ```host index``` is a number which identifies a host on which each individual file is created among all hosts. 
 
 ### Writing a file
+
+To write a file, you can do
+
 ```
-nl -w 1 -b a ~/Documents/FSM.md | bred -r 'cat > /tmp/bredfs/${BRED_PARTID}/work/FSM.md' -T '-n' -c 1 >& /dev/null
-```
-### Reading a file
-```
-echo "" | bred -r 'cat /tmp/bredfs/${BRED_PARTID}/work/FSM.md' -T '-n' -c 1 2> /dev/null | cut -f2-
+    APPEND=README.md TO="/path/to/store-1" bredfs write
 ```
 
-### Listing a directory
+The content of ```README.md``` will be added to a virtual file ```/path/to/store-1```.
+
+### Reading a file
+
+Reading a file is a bit more complecated part than the others.
+Just to read it, you can do
+
 ```
-echo "" | ./bred -r 'ls /tmp/bredfs/${BRED_PARTID}/work |sort' -T '-n' -c 1 2> /dev/null | sort -m | uniq
+    FROM=/path/to/store-1 bredfs read
 ```
+
+If you want to filter lines from the file, you can do following for instance
+
+```
+    FROM=/path/to/store-1 WHERE="grep -E 'A|HELLO'" bredfs read
+```
+
+This will print lines containing ```A``` or ```HELLO``` in a virtual file ```/path/to/store-1```.
+
+Also you can pick up column(s) from each line by a following command line.
+
+```
+    SELECT="cut -f 2 -d ' '" WHERE="grep 'HELLO'" FROM="/path/to/store-1" bredfs read
+```
+
+This will print *first* column from the left in lines which contain "HELLO".
+That is, if content of ```/path/to/store-1``` is as following,
+
+```
+
+    howdy HELLO
+	mundus World
+
+```
+
+then printed will be
+
+```
+    howdy
+```
+
+And you may already notice the command passed to ```bredfs``` to pick up certain column is,
+
+```
+    cut -f 2 -d ' '
+```
+
+This should print *second* column not the *first* column.
+Why can this happen?
+
+It is because ```bredfs``` appends an id to each line of the input file when it is stored.
+This means the file above will be splitted and stored in two files as follows
+
+```file 1```
+
+```
+
+    1 howdy HELLO
+
+```
+
+```file 2```
+
+```
+
+    2 mundus World
+
+```
+
+And the left most column will be stripped on ```bredfs read``` automatically.
+This is why you need to ```+1``` to access intended data when you use ```cut``` command in ```SELECT```.
+More generatilly, of course, you need take this behavior into consideration when using ```SELECT``` and access one next right columns to get appropriate data.
 
 ## Classic examples
-Below are the examples from original ```br```
+Followings are the examples from original ```br```
 
 ### sorting
 
@@ -218,6 +295,8 @@ We have a new bottleneck: we're limited by how quickly we can partition/pump our
 
 # Future work
 
+* [Error handling improvement]()
+* [Directory listing support]()
 * [Implement better data exchange mechanism #3](https://github.com/dakusui/bred/issues/3)
 
 # Notes

@@ -3,14 +3,15 @@
 ```bredxbred``` is a project to develop an easy map reduce framework where you can define map and reduce jobs with your daily tools like bash, awk, perl, etc.
 
 It consists of two components,
-* ```bred```: Enhanced version of 'bashreduce'. Original bashreduce was developed by Erik Frey. It enables you to write a map reduce job. 
+
+* ```bred```: Enhanced version of 'bashreduce'. Original bashreduce was developed by Erik Frey. It enables you to write a map reduce job.
 * ```xbred```: an interpreter to write a pipeline which consists of ```bred``` based map reduce jobs.
 
 
 # Requirements
 
 ## Platform
-```bred``` and ```xbred`` are on following platforms.
+```bred``` and ```xbred``` are tested on following platforms.
 
 * Raspbian GNU/Linux 7
 * Ubuntu 14.04.2 LTS
@@ -57,8 +58,8 @@ Make sure each of them has a correct permission (shown in parentheses)
 
 ## Configure the environment
 
-Following is the content of ```bred.conf```.
-Basically you can use it without modifying it.
+Following is the content of [```bred.conf```](bred.conf).
+Basically you can use it without modifying it if you just want to exploit multi-core benefit of your local machine.
 
 ```
 
@@ -75,8 +76,11 @@ Basically you can use it without modifying it.
 ```
 
 * ```baseport```: ```bred``` allocates ports to each task.
-* ```hosts```: If you have more than 4 cores, By repeating ```localhost``` as many as the number of your cores, you might be able to exploit the CPU's power.
+* ```hosts```: If you have more than 4 cores, by repeating ```localhost``` as many as the number of your cores, you might be able to exploit the CPU's power.
 * ```namenode```:  The host name of this machine. This name must be able to be accessed through passwordless ssh from all the hosts listed in ```hosts```.
+* ```workdir```: Directory under which all bred logs, contents, and data are stored. You must guarantee that this directory exists, visible, and writeble for the user who executes ```bred``` and ```xbred```.
+* ```fsdir```: ```bred``` provides a "poorman's" distributed file system feature (```bredfs```). This directory stores all the contents in the file system in a distributed manner.
+* ```jmdir```: ```bred``` has a feature to choose available port numbers automatically. In ```bred```, a "job number" is assigned to a set of ports used by one ```bred``` process, and managed under this directory so that it doesn't collide with other proceess's.
 
 ## Write your own map reduce program
 
@@ -122,7 +126,7 @@ Following is a 'word count' example written in ```xbred``` style.
 ```
 
 Refer to [XBRED](docs/XBRED.md) for more details.
-You can find more examples under [examples](examples/EXAMPLES.md) directory.
+You can find more examples under [examples](examples/README.md) directory.
 
 # Future works
 * Create an installer.
