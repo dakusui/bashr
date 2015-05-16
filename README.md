@@ -19,6 +19,7 @@ It consists of two components,
 ## Software dependencies
 
 * bash (Ubuntu - 4.3.11(1), Raspbian - 4.2.37(1))
+ * bash needs to be a login shell of the user who executes ```bred``` and ```xbred```
 * Other Unix tools
  * coreutils 
  * netcat-traditional (nc command. It must support listen mode)
@@ -28,7 +29,20 @@ It consists of two components,
  * openssh-server
  * rsync
 
+
+## Environment
+
+* A unix user to execute ```bred``` and ```xbred```.
+ * Currently only one user per environment can user ```bred``` and ```xbred```.
+
+* Login shell
+
+* Directories
+
+
 # Installation
+## Setting up an environment
+
 ## Build a utility program: ```brp```
 Build a utility program ```brp``` by running make command in ```utils``` directory.
 
@@ -81,6 +95,11 @@ Basically you can use it without modifying it if you just want to exploit multi-
 * ```workdir```: Directory under which all bred logs, contents, and data are stored. You must guarantee that this directory exists, visible, and writeble for the user who executes ```bred``` and ```xbred```.
 * ```fsdir```: ```bred``` provides a "poorman's" distributed file system feature (```bredfs```). This directory stores all the contents in the file system in a distributed manner.
 * ```jmdir```: ```bred``` has a feature to choose available port numbers automatically. In ```bred```, a "job number" is assigned to a set of ports used by one ```bred``` process, and managed under this directory so that it doesn't collide with other proceess's.
+
+## Create directories
+Create ```fsdir``` and ```jmdir``` and make sure they are writable by the user by whom you are going to execute ```bred``` and ```xbred```.
+
+
 
 ## Write your own map reduce program
 
