@@ -13,7 +13,6 @@ It consists of two components,
 ## Platform
 ```bred``` and ```xbred``` are tested on following platforms.
 
-* Raspbian GNU/Linux 7
 * Ubuntu 14.04.2 LTS
 
 ## Software dependencies
@@ -148,6 +147,7 @@ Refer to [XBRED](docs/XBRED.md) for more details.
 You can find more examples under [examples](examples/README.md) directory.
 
 # Future works
+* [Support Raspbian (xbred)](https://github.com/dakusui/bredxbred/issues/12)
 * [Improve error handlings](https://github.com/dakusui/bredxbred/issues/7)
 * [Directory listing support](https://github.com/dakusui/bredxbred/issues/8)
 * [Create an installer](https://github.com/dakusui/bredxbred/issues/9)
