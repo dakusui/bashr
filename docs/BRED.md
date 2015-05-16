@@ -293,12 +293,6 @@ Here lies the promise of mapreduce: rather than use my big honkin' machine, I ha
 
 We have a new bottleneck: we're limited by how quickly we can partition/pump our dataset out to the nodes.  awk and sort begin to show their limitations (our clever awk script is a bit cpu bound, and @sort -m@ can only merge so many files at once).  So we use two little helper programs written in C (yes, I know!  it's cheating!  if you can think of a better partition/merge using core unix tools, contact me) to partition the data and merge it back.
 
-# Future work
-
-* [Error handling improvement]()
-* [Directory listing support]()
-* [Implement better data exchange mechanism #3](https://github.com/dakusui/bred/issues/3)
-
 # Notes
 ## About ```brp```'s behaviors
 brp and the small awk script which dispatches rows basically do the same thing.

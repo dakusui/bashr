@@ -129,8 +129,12 @@ Refer to [XBRED](docs/XBRED.md) for more details.
 You can find more examples under [examples](examples/README.md) directory.
 
 # Future works
-* Create an installer.
-* Rectify terminology in script files. "task" and "job" are used in inconsistent ways.
+* [Improve error handlings](https://github.com/dakusui/bredxbred/issues/7)
+* [Directory listing support](https://github.com/dakusui/bredxbred/issues/8)
+* [Create an installer](https://github.com/dakusui/bredxbred/issues/9)
+* [Rectify terminology in script files. "task" and "job" are used in inconsistent ways](https://github.com/dakusui/bredxbred/issues/10)
+* [Implement better data exchange mechanism](https://github.com/dakusui/bred/issues/3)
+* [Allow quotations in variable declaration section of .xbred file](https://github.com/dakusui/bredxbred/issues/11)
 
 # Author
 * Erik Frey <erik@fawx.com>

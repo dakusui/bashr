@@ -231,10 +231,6 @@ You can simply give your program to ```xbred``` command as its argument.
    
 ```
 
-
-# Future works
-* Allow quotations in variable declarations.
-
 # Author
 * Hiroshi Ukai <dakusui@gmail.com>
 
