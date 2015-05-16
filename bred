@@ -468,7 +468,7 @@ bred_executejob() {
   #           sort/cat sometimes print nothing. This happens intermittently on
   #           Raspberry Pi 2. We do 'ls' here.
   local _in_files_state=$(ls -al ${in_files})
-  debug "bred_executejob: INFO: in_files: ${_in_files_state}"
+  debug "INFO: in_files: ${_in_files_state}"
   local _each_host
   local _host_idx=0
   for _each_host in "${hosts[@]}"; do
@@ -478,14 +478,18 @@ bred_executejob() {
   done
   # END OF WARNING
   ##
+
+  debug "INFO: merge is started"
   if [ ${sort_on_out} == "yes" ] ; then
     eval "sort -k${sort_column},${sort_column} -m ${in_files} ${sort_opt} ${output:+| pv >$output}"
   else
     eval "cat ${in_files} ${output:+| pv >$output}"
   fi
+  debug "INFO: merge is finished"
   
   ####
   # save errors somewhere
+  debug "INFO: saving errors"
   local j=0;
   for host in "${hosts[@]}"; do
     local cmd='for i in $(ls '${nodepath}'/'${j}'/err*); do echo '${j}' $(echo $i); nl -w 1 -s " " $i; echo '${j}' ----; done'
@@ -497,9 +501,11 @@ bred_executejob() {
     fi
     j=$(($j + 1))
   done
+  debug "INFO: errors are saved"
   
   ####    
   # finally, clean up after ourselves
+  debug "INFO: cleaning up"
   if  ! is_debug ; then
     rm -rf "${jobpath:?something goes wrong!}"
     for host in ${hosts}; do
@@ -507,6 +513,7 @@ bred_executejob() {
     done
     rm -fr "${jmdir:?something goes wrong!}/${job_idx:?something goes wrong!}" >&2
   fi
+  debug "INFO: clepan up is finished"
   
   ####    
   # TODO: is there a safe way to kill subprocesses upon fail?
@@ -561,6 +568,8 @@ main() {
   debug "main: hosts='${hosts[*]}'"
   
   bred_executejob;
+
+  debug "main: job execution is finished."
 }
 
 main "$@"
