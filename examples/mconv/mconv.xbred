@@ -8,8 +8,8 @@
 #
 ########################################################################
 
-declare SRCDIRS=/mnt/livius/Qmultimedia/FLAC:/mnt/livius/Qmultimedia/HIRES
-declare DESTDIR=/mnt/livius/Qmultimedia/PS3-test/Music
+declare SRCDIRS=/mnt/livius/Qmultimedia/FLAC:/mnt/livius/Qmultimedia/HIRES:/mnt/livius/Qmultimedia/iTunesMusic
+declare DESTDIR=/mnt/livius/Qmultimedia/Livian/Music
 
 ####
 #          Id: main
@@ -20,7 +20,7 @@ declare DESTDIR=/mnt/livius/Qmultimedia/PS3-test/Music
 function local main(bash,-,conv) inline:<<EOF
     for srcdir in $(echo ${SRCDIRS} | sed -e 's/:/ /g')
     do
-        find "${srcdir}" -type f -size +1c -not -name '.*' -exec printf "${srcdir} %s\n" {} \; | \
+        find "${srcdir}" -type f -size +1c -not -name '.*' -prune -name '.@__*' -exec printf "${srcdir} %s\n" {} \; | \
         sed -e "s%${srcdir}/%%" | \
         nl -w 1 -s ' ' -b a
     done
@@ -41,7 +41,7 @@ function map conv(bash,1,-) inline:<<EOF
       srcdir=$(echo "$line" | cut -f 2 -d ' ') 
       fname=$(echo "$line" | cut -f 3- -d ' ' | sed -e "s%${srcdir}/%%")
       srcfname="${srcdir}/$fname"
-      destfname="$DESTDIR/${fname%.*}.mp4"
+      destfname="$DESTDIR/${fname%.*}.mp3"
       if [ "${srcfname}" -nt "${destfname}" ] ; then
         # dirname breaks non-ascii path names. let's use bash's pattern matching opertor instead...
         mkdir -p "${DESTDIR}/${fname%/*}"
