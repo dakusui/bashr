@@ -13,17 +13,20 @@ It consists of two components,
 ## Platform
 ```bred``` and ```xbred``` are tested on following platforms.
 
-* Ubuntu 14.04.2 LTS
+* Ubuntu 16.04.2 LTS
 
 ## Software dependencies
 
-* bash (Ubuntu - 4.3.11(1), Raspbian - 4.2.37(1))
+ * bash (Ubuntu - 4.3.11(1), Raspbian - 4.2.37(1))
  * bash needs to be a login shell of the user who executes ```bred``` and ```xbred```
-* Other Unix tools
+ * Other Unix tools
  * coreutils 
- * netcat-traditional (nc command. It must support listen mode)
+ * **netcat-traditional**
+     * netcat-openbsd provides the nc command on many dristributions by default which is not good.
+     * It also must support listen mode.
  * pv
- * gawk
+ * gawk or any awk implementation provides ```awk```
+     * mawk is considered faster than gawk in many cases
  * openssh-client
  * openssh-server
  * rsync
@@ -33,14 +36,16 @@ It consists of two components,
 
 * A unix user to execute ```bred``` and ```xbred```.
  * Currently only one user per environment can user ```bred``` and ```xbred```.
-
 * Login shell
-
 * Directories
 
-
 # Installation
-## Setting up an environment
+## Setting up an environment (on each machine)
+
+* **Make sure all tests pass before the actual usage!**
+* If something breaks down try cleaning up the environment first:
+    * ```killall awk; killall nc; rm -rf [BRED_WORKDIR]/ && mkdir -p [BRED_WORKDIR]/{fs,jm,sort}```
+* In case of problems try geing more information with ```export XBRED_DEBUG="on"```
 
 ## Build a utility program: ```brp```
 Build a utility program ```brp``` by running make command in ```utils``` directory.
@@ -54,6 +59,7 @@ Build a utility program ```brp``` by running make command in ```utils``` directo
 
 
 ## Place files somewhere handy in your PATH
+**Should work with non-interactive shell usage as well, where .bashrc is not parsed!**
 Recommended directory structure is shown below.
 Make sure each of them has a correct permission (shown in parentheses)
 
@@ -62,7 +68,7 @@ Make sure each of them has a correct permission (shown in parentheses)
     /usr/local
 	    bin/
 			bred.conf (644)
-		    bred (744)
+		        bred (744)
 			bred-core (644)
 			brp (755)
 			xbred (755)
@@ -142,6 +148,7 @@ Following is a 'word count' example written in ```xbred``` style.
     EOF
 
 ```
+**Run it with:** ```cat input.txt | ./word_count.xbred > output.txt```
 
 Refer to [XBRED](docs/XBRED.md) for more details.
 You can find more examples under [examples](examples/README.md) directory.

@@ -56,6 +56,17 @@ function bredcheckenv_nc_is_installed() {
   fi
 }
 
+function bredcheckenv_nc_is_not_openbsd_version() {
+  if [ $1 == 'expected' ]; then
+    echo '0'
+  elif [ $1 == 'actual' ]; then
+    nc -h 2>&1 | grep "OpenBSD" | wc -l
+  else
+    echo "Invalid mode $1 is specified"
+    exit 1
+  fi
+}
+
 function bredcheckenv_nc_supports_listen_mode() {
   if [ $1 == 'expected' ]; then
     echo '2'
@@ -111,6 +122,23 @@ function bredcheckenv_loginshell_is_bash() {
     echo 'bash'
   elif [ $1 == 'actual' ]; then
     timeout 5 ssh localhost 'echo $0'
+  else
+    echo "Invalid mode $1 is specified"
+    exit 1
+  fi
+}
+
+####
+# Make sure bred is in the PATH even when .bashrc not executed because non-interactive shell
+#
+# Fix in case of fail:
+# 1. Make sure bredcheckenv_passwordless_ssh_is_ok is passing.
+# 2. Put bred for example under /usr/local/bin
+function bredcheckenv_bred_is_in_path_when_using_ssh_command_for_bredfs_write() {
+  if [ $1 == 'expected' ]; then
+    echo '1'
+  elif [ $1 == 'actual' ]; then
+    timeout 5 ssh localhost env PATH="$PATH" 'bred -h' 2>&1 | fgrep "bred. bashreduce enhanced." | wc -l 
   else
     echo "Invalid mode $1 is specified"
     exit 1
